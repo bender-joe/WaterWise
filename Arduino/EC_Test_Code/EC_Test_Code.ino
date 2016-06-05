@@ -20,6 +20,7 @@
 #define StartConvert 0
 #define ReadTemperature 1
 
+const float factor = 0.9055;
 const byte numReadings = 20;     //the number of sample times
 byte ECsensorPin = A1;  //EC Meter analog output,pin on analog 1
 byte DS18B20_Pin = 2; //DS18B20 signal, pin on digital 2
@@ -104,7 +105,7 @@ void loop() {
       else if(CoefficientVolatge<=1457)ECcurrent=6.98*CoefficientVolatge-127;  //3ms/cm<EC<=10ms/cm
       else ECcurrent=5.3*CoefficientVolatge+2278;                           //10ms/cm<EC<20ms/cm
       ECcurrent/=1000;    //convert us/cm to ms/cm
-      Serial.print(ECcurrent,2);  //two decimal
+      Serial.print(ECcurrent/factor,2);  //two decimal
       Serial.println("ms/cm");
     }
   }
