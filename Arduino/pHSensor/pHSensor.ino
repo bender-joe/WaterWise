@@ -6,7 +6,7 @@
  # SKU    : SEN0161
 */
 #define SensorPin A0            //pH meter Analog output to Arduino Analog Input 0
-#define Offset 0.00            //deviation compensate
+#define Offset 0.16            //deviation compensate updated to compensate
 #define LED 13
 #define samplingInterval 20
 #define printInterval 800
@@ -59,7 +59,7 @@ double avergearray(int* arr, int number){
     return avg;
   }else{
     if(arr[0]<arr[1]){
-      min = arr[0];max=arr[1];
+      min = arr[0];max=arr[1];  
     }
     else{
       min=arr[1];max=arr[0];
