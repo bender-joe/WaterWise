@@ -2,7 +2,13 @@
 
   Joseph Bender (2016)
   Senior Design Project
-  WaterWise atmega2560 cdoe
+  WaterWise atmega2560 code
+  Dev Items:
+    - LCD Menu          - Complete
+    - Wifi Comms        - TODO
+    - Sensor Pull Data  - TODO
+    - Relay Signaling   - TODO
+    - P_Pumps Signaling - TODO
 
 **************************************************************************************/
 #include <Arduino.h>
@@ -14,6 +20,7 @@ LiquidCrystal lcd(8, 9, 4, 5, 6, 7);           // select the pins used on the LC
 int lcd_key     = 0;
 int adc_key_in  = 0;
 int currentMenu = 0;
+int lcdStatus   = 0;
 
 // Button Constants
 #define btnRIGHT  0
@@ -24,17 +31,21 @@ int currentMenu = 0;
 #define btnNONE   5
 
 // Menu Display Status Constants
-#define mainMenu        100
-#define powerAll        101
-#define powerMainPump   102
-#define powerAirStone   103
-#define powerLight      104
-#define sensorEC        105
-#define sensorPH        106
-#define sensorWTemp     107
-#define sensorATemp     108
-#define sensorHumid    109
-#define sensorWLevel    110
+#define LCDSLEEP             98
+#define LCDAWAKE             99
+#define mainMenu            100
+#define powerAll            101
+#define powerMainPump       102
+#define powerAirStone       103
+#define powerLight          104
+#define sensorEC            105
+#define sensorPH            106
+#define sensorWTemp         107
+#define sensorATemp         108
+#define sensorHumid         109
+#define sensorWLevel        110
+#define mainMenu2           111
+#define menuScrollingSpeed  25
 
 int read_LCD_buttons(){               // read the buttons
     adc_key_in = analogRead(0);       // read the value from the sensor
@@ -57,11 +68,41 @@ int read_LCD_buttons(){               // read the buttons
 
 void displayMenuR(int menu)
 {
+  // scroll the previous text left off of the screen
+  for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+    lcd.scrollDisplayLeft();
+    delay(menuScrollingSpeed);
+  }
   // clear the current screen
   // need to scroll in the text
   lcd.clear();
   //which menu to print
-  switch(menu){
+  switch(menu)
+  {
+    case mainMenu:
+      lcd.print("Power");               // print a simple message on the LCD
+      lcd.setCursor(0,1);               // set the LCD cursor   position
+      lcd.print("Sensors");
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayRight();
+      }
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayLeft();
+        delay(menuScrollingSpeed);
+      }
+      break;
+
+    case mainMenu2:
+      lcd.print("System Sleep");
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayRight();
+      }
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayLeft();
+        delay(menuScrollingSpeed);
+      }
+      break;
+
     case powerAll:
       lcd.print("All On");
       lcd.setCursor(0,1);
@@ -71,9 +112,10 @@ void displayMenuR(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayLeft();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
       break;
+
     case powerMainPump:
       lcd.print("Main Pump On");
       lcd.setCursor(0,1);
@@ -83,9 +125,10 @@ void displayMenuR(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayLeft();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
       break;
+
     case powerAirStone:
       lcd.print("Air Stone On");
       lcd.setCursor(0,1);
@@ -95,9 +138,10 @@ void displayMenuR(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayLeft();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
       break;
+
     case powerLight:
       lcd.print("Lighting On");
       lcd.setCursor(0,1);
@@ -107,9 +151,10 @@ void displayMenuR(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayLeft();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
       break;
+
     case sensorPH:
       lcd.print("pH Sensor");
       lcd.setCursor(0,1);
@@ -119,31 +164,115 @@ void displayMenuR(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayLeft();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
-      case sensorEC:
-        lcd.print("EC Sensor ms/cm");
-        lcd.setCursor(0,1);
-        lcd.print("xx.xx  HH:MM:SS");    // Get latest ph reading here
-        for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
-          lcd.scrollDisplayRight();
-        }
-        for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
-          lcd.scrollDisplayLeft();
-          delay(75);
-        }
       break;
+
+    case sensorEC:
+      lcd.print("EC Sensor ms/cm");
+      lcd.setCursor(0,1);
+      lcd.print("xx.xx  HH:MM:SS");    // Get latest ph reading here
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayRight();
+      }
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayLeft();
+        delay(menuScrollingSpeed);
+      }
+      break;
+
+    case sensorWTemp:
+      lcd.print("Water Temp Faren");
+      lcd.setCursor(0,1);
+      lcd.print("xxx.xxx HH:MM:SS");    // get latest water temp here
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayRight();
+      }
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayLeft();
+        delay(menuScrollingSpeed);
+      }
+      break;
+
+    case sensorWLevel:
+      lcd.print("Water Level HML");
+      lcd.setCursor(0,1);
+      lcd.print("xxxxxxx HH:MM:SS");
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayRight();
+      }
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayLeft();
+        delay(menuScrollingSpeed);
+      }
+      break;
+
+    case sensorATemp:
+      lcd.print("Air Temp Faren");
+      lcd.setCursor(0,1);
+      lcd.print("xxxxxxx HH:MM:SS");
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayRight();
+      }
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayLeft();
+        delay(menuScrollingSpeed);
+      }
+      break;
+
+    case sensorHumid:
+      lcd.print("Air Humidity %");
+      lcd.setCursor(0,1);
+      lcd.print("xxxxxxx HH:MM:SS");
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayRight();
+      }
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayLeft();
+        delay(menuScrollingSpeed);
+      }
+      break;
+
     default: break;
   }
 }
 
 void displayMenuL(int menu)
 {
-  // clear the current screen
+  // scroll the current screen to the Right
+  for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+    lcd.scrollDisplayRight();
+    delay(menuScrollingSpeed);
+  }
   // need to scroll in the text left
   lcd.clear();
   //which menu to print
-  switch(menu){
+  switch(menu)
+  {
+    case mainMenu:
+      lcd.print("Power");               // print a simple message on the LCD
+      lcd.setCursor(0,1);               // set the LCD cursor   position
+      lcd.print("Sensors");
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayLeft();
+      }
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayRight();
+        delay(menuScrollingSpeed);
+      }
+      break;
+
+    case mainMenu2:
+      lcd.print("System Sleep");
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayLeft();
+      }
+      for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
+        lcd.scrollDisplayRight();
+        delay(menuScrollingSpeed);
+      }
+      break;
+
     case powerAll:
       lcd.print("All On");
       lcd.setCursor(0,1);
@@ -153,9 +282,10 @@ void displayMenuL(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
       break;
+
     case powerMainPump:
       lcd.print("Main Pump On");
       lcd.setCursor(0,1);
@@ -165,9 +295,10 @@ void displayMenuL(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
       break;
+
     case powerAirStone:
       lcd.print("Air Stone On");
       lcd.setCursor(0,1);
@@ -177,9 +308,10 @@ void displayMenuL(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
       break;
+
     case powerLight:
       lcd.print("Lighting On");
       lcd.setCursor(0,1);
@@ -189,9 +321,10 @@ void displayMenuL(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
       break;
+
     case sensorPH:
       lcd.print("pH Sensor");
       lcd.setCursor(0,1);
@@ -201,8 +334,9 @@ void displayMenuL(int menu)
       }
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
-        delay(75);
+        delay(menuScrollingSpeed);
       }
+
       case sensorEC:
         lcd.print("EC Sensor ms/cm");
         lcd.setCursor(0,1);
@@ -212,9 +346,10 @@ void displayMenuL(int menu)
         }
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayRight();
-          delay(75);
+          delay(menuScrollingSpeed);
         }
-      break;
+        break;
+
       case sensorWTemp:
         lcd.print("Water Temp Faren");
         lcd.setCursor(0,1);
@@ -224,9 +359,10 @@ void displayMenuL(int menu)
         }
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayRight();
-          delay(75);
+          delay(menuScrollingSpeed);
         }
-      break;
+        break;
+
       case sensorWLevel:
         lcd.print("Water Level HML");
         lcd.setCursor(0,1);
@@ -236,9 +372,10 @@ void displayMenuL(int menu)
         }
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayRight();
-          delay(75);
+          delay(menuScrollingSpeed);
         }
-      break;
+        break;
+
       case sensorATemp:
         lcd.print("Air Temp Faren");
         lcd.setCursor(0,1);
@@ -248,9 +385,10 @@ void displayMenuL(int menu)
         }
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayRight();
-          delay(75);
+          delay(menuScrollingSpeed);
         }
       break;
+
       case sensorHumid:
         lcd.print("Air Humidity %");
         lcd.setCursor(0,1);
@@ -260,9 +398,10 @@ void displayMenuL(int menu)
         }
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayRight();
-          delay(75);
+          delay(menuScrollingSpeed);
         }
-      break;
+        break;
+
     default: break;
   }
 }
@@ -345,6 +484,10 @@ void processDisplay()
               currentMenu = powerAll;   // set the curren menu status
               displayMenu(currentMenu); // display power all
               break;
+            case mainMenu2:
+              // System Sleep option, turn off the LCD
+              /*lcd.noDisplay();*/
+              break;
             case powerAll:              // @ power all menu
               break;                    // power on all relay
             case powerMainPump:         // @ power main pump menu
@@ -355,7 +498,7 @@ void processDisplay()
               break;                    // turn on light relay
             default: break;
           }
-        break;
+          break;
 
         // Process Down button pushes
         case btnDOWN:
@@ -375,48 +518,145 @@ void processDisplay()
               break;                    // turn off light relay
             default: break;
           }
-        break;
+          break;
 
         // Process Right Button Presses
         case btnRIGHT:
-        switch(currentMenu)               // for Button Right check which menu is at
-        {
-          case powerAll:                  // @ power all menu
-            currentMenu = powerMainPump;  // go to the main pump menu
-            for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
-              lcd.scrollDisplayLeft();
-              delay(75);
-            }
-            displayMenuR(currentMenu);
-            break;                        // display the main pump menu
-          case powerMainPump:             // @ power main pump menu
-            currentMenu = powerAirStone;
-            for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
-              lcd.scrollDisplayLeft();
-              delay(75);
-            }
-            displayMenuR(currentMenu);
-            break;                        // turn off main pump relay
-          case powerAirStone:             // @ power air stone menu
-            currentMenu = powerLight;
-            for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
-              lcd.scrollDisplayLeft();
-              delay(75);
-            }
-            displayMenuR(currentMenu);
-            break;                        // turn off air stone relay
-          case powerLight:                // @ power light menu
-          currentMenu = powerAll;
-            for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
-              lcd.scrollDisplayLeft();
-              delay(75);
-            }
-            displayMenuR(currentMenu);
-            break;                        // turn off light relay
-          default: break;
-        }
-        break;
+          switch(currentMenu)               // for Button Right check which menu is at
+          {
+            case mainMenu:
+              currentMenu = mainMenu2;
+              displayMenuR(currentMenu);
+              break;
 
+            case mainMenu2:
+              currentMenu = mainMenu;
+              displayMenuR(currentMenu);
+              break;
+
+            case powerAll:                  // @ power all menu
+              currentMenu = powerMainPump;  // go to the main pump menu
+              displayMenuR(currentMenu);
+              break;                        // display the main pump menu
+
+            case powerMainPump:             // @ power main pump menu
+              currentMenu = powerAirStone;
+              displayMenuR(currentMenu);
+              break;                        // turn off main pump relay
+
+            case powerAirStone:             // @ power air stone menu
+              currentMenu = powerLight;
+              displayMenuR(currentMenu);
+              break;                        // turn off air stone relay
+
+            case powerLight:                // @ power light menu
+              currentMenu = powerAll;
+              displayMenuR(currentMenu);
+              break;                        // turn off light relay
+
+            case sensorPH:
+              currentMenu = sensorEC;
+              displayMenuR(currentMenu);
+              break;
+
+            case sensorEC:
+              currentMenu = sensorWTemp;
+              displayMenuR(currentMenu);
+              break;
+
+            case sensorWTemp:
+              currentMenu = sensorWLevel;
+              displayMenuR(currentMenu);
+              break;
+
+            case sensorWLevel:
+              currentMenu = sensorATemp;
+              displayMenuR(currentMenu);
+              break;
+
+            case sensorATemp:
+              currentMenu = sensorHumid;
+              displayMenuR(currentMenu);
+              break;
+
+            case sensorHumid:
+              currentMenu = sensorPH;
+              displayMenuR(currentMenu);
+              break;
+
+            default: break;
+          }
+          break;
+
+        // process left button pushes
+        case btnLEFT:
+          switch (currentMenu)
+          {
+            case mainMenu:
+              currentMenu = mainMenu2;
+              displayMenuR(currentMenu);
+              break;
+
+            case mainMenu2:
+              currentMenu = mainMenu;
+              displayMenuR(currentMenu);
+              break;
+
+            case powerAll:                  // @ power all menu
+              currentMenu = powerLight;  // go to the main pump menu
+              displayMenuL(currentMenu);
+              break;                        // display the main pump menu
+
+            case powerMainPump:             // @ power main pump menu
+              currentMenu = powerAll;
+              displayMenuL(currentMenu);
+              break;                        // turn off main pump relay
+
+            case powerAirStone:             // @ power air stone menu
+              currentMenu = powerMainPump;
+              displayMenuL(currentMenu);
+              break;                        // turn off air stone relay
+
+            case powerLight:                // @ power light menu
+              currentMenu = powerAirStone;
+              displayMenuL(currentMenu);
+              break;                        // turn off light relay
+
+            case sensorPH:
+              currentMenu = sensorHumid;
+              displayMenuL(currentMenu);
+              break;
+
+            case sensorEC:
+              currentMenu = sensorPH;
+              displayMenuL(currentMenu);
+              break;
+
+            case sensorWTemp:
+              currentMenu = sensorEC;
+              displayMenuL(currentMenu);
+              break;
+
+            case sensorWLevel:
+              currentMenu = sensorWTemp;
+              displayMenuL(currentMenu);
+              break;
+
+            case sensorATemp:
+              currentMenu = sensorWLevel;
+              displayMenuL(currentMenu);
+              break;
+
+            case sensorHumid:
+              currentMenu = sensorATemp;
+              displayMenuL(currentMenu);
+              break;
+
+            default: break;
+          }
+          break;
+
+        // process select button presses, should only go back to All Menu
         case btnSELECT:
           switch(currentMenu){
             case powerAll:
@@ -429,20 +669,30 @@ void processDisplay()
             case sensorHumid:
             case sensorWTemp:
             case sensorWLevel:
-            currentMenu = mainMenu;
-            displayMenu(currentMenu); break;
+            if(lcdStatus == LCDAWAKE)
+            {
+              currentMenu = mainMenu;
+              displayMenu(currentMenu);
+            }
+            if(lcdStatus == LCDSLEEP)
+            {
+              lcdStatus = LCDAWAKE;
+              lcd.display();
+            }
+            break;
           }
           break;
     }
 }
 
 void setup(){
-   lcd.begin(16, 2);               // start the library
-   lcd.setCursor(0,0);             // set the LCD cursor   position
-   lcd.print("Power");              // print a simple message on the LCD
-   lcd.setCursor(0,1);             // set the LCD cursor   position
-   lcd.print("Sensors");
-   currentMenu = mainMenu;
+  lcdStatus = LCDAWAKE;
+  lcd.begin(16, 2);               // start the library
+  lcd.setCursor(0,0);             // set the LCD cursor   position
+  lcd.print("Power");              // print a simple message on the LCD
+  lcd.setCursor(0,1);             // set the LCD cursor   position
+  lcd.print("Sensors");
+  currentMenu = mainMenu;
 }
 
 void loop()
