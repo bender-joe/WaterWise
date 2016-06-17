@@ -14,6 +14,7 @@
 #include <Arduino.h>
 #include <LiquidCrystal.h>
 #include <OneWire.h>
+#include "DHT.h"
 
 // PH CONSTANTS
 #define SensorPin A5            //pH meter Analog output to Arduino Analog Input 0
@@ -47,6 +48,12 @@
 #define sensorWLevel        110
 #define mainMenu2           111
 #define menuScrollingSpeed  25
+#define DHTPIN 3     // what digital pin we're connected to
+#define DHTTYPE DHT11   // DHT 11
+
+
+//DHT11
+DHT dht(DHTPIN, DHTTYPE);
 
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);           // select the pins used on the LCD panel
 
@@ -75,6 +82,9 @@ unsigned long AnalogValueTotal = 0;                  // the running total
 unsigned int AnalogAverage = 0,averageVoltage=0;                // the average
 unsigned long AnalogSampleTime,printTime,tempSampleTime;
 float temperature,ECcurrent;
+unsigned int airTempSampleInterval = 2000;
+float airTemp = 0.0;
+float humidity = 0.0;
 //Temperature chip i/o
 OneWire ds(DS18B20_Pin);  // on digital pin 2
 
@@ -244,7 +254,8 @@ void displayMenuR(int menu)
     case sensorATemp:
       lcd.print("Air Temp Faren");
       lcd.setCursor(0,1);
-      lcd.print("xxxxxxx HH:MM:SS");
+      lcd.print(airTemp, 2);
+      lcd.print(" HH:MM:SS");
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
       }
@@ -257,7 +268,8 @@ void displayMenuR(int menu)
     case sensorHumid:
       lcd.print("Air Humidity %");
       lcd.setCursor(0,1);
-      lcd.print("xxxxxxx HH:MM:SS");
+      lcd.print(humidity, 2);
+      lcd.print(" HH:MM:SS");
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
       }
@@ -417,7 +429,8 @@ void displayMenuL(int menu)
       case sensorATemp:
         lcd.print("Air Temp Faren");
         lcd.setCursor(0,1);
-        lcd.print("xxxxxxx HH:MM:SS");
+        lcd.print(airTemp, 2);
+        lcd.print(" HH:MM:SS");
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayLeft();
         }
@@ -430,7 +443,8 @@ void displayMenuL(int menu)
       case sensorHumid:
         lcd.print("Air Humidity %");
         lcd.setCursor(0,1);
-        lcd.print("xxxxxxx HH:MM:SS");
+        lcd.print(humidity, 2);
+        lcd.print(" HH:MM:SS");
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayLeft();
         }
@@ -501,12 +515,14 @@ void displayMenu(int menu)
     case sensorATemp:
       lcd.print("Air Temp Faren");
       lcd.setCursor(0,1);
-      lcd.print("xxxxxxx HH:MM:SS");
+      lcd.print(airTemp, 2);
+      lcd.print(" HH:MM:SS");
       break;
     case sensorHumid:
       lcd.print("Air Humidity %");
       lcd.setCursor(0,1);
-      lcd.print("xxxxxxx HH:MM:SS");
+      lcd.print(humidity, 2);
+      lcd.print(" HH:MM:SS");
       break;
     default: break;
   }
@@ -735,15 +751,35 @@ void setup(){
   lcd.setCursor(0,1);             // set the LCD cursor   position
   lcd.print("Sensors");
   currentMenu = mainMenu;
+  dht.begin();
 }
 
 void loop()
 {
   // measurePH();
-  measureEC();
+  // measureEC();
+  measureAirTemp();
   processDisplay();
 }
 
+void measureAirTemp()
+{
+  static unsigned long samplingTime = millis();
+  if(millis()-samplingTime > airTempSampleInterval)
+  {
+    airTemp = dht.readTemperature(true);
+    humidity = dht.readHumidity();
+    samplingTime = millis();
+  }
+  if (isnan(airTemp) || isnan(humidity)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+  Serial.print("Temperature = ");
+  Serial.println(airTemp);
+  Serial.print("Humidity = ");
+  Serial.println(humidity);
+}
 void measureEC()
 {
   /*
