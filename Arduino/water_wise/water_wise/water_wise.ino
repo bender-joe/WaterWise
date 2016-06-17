@@ -13,23 +13,24 @@
 **************************************************************************************/
 #include <Arduino.h>
 #include <LiquidCrystal.h>
+#include <OneWire.h>
 
-LiquidCrystal lcd(8, 9, 4, 5, 6, 7);           // select the pins used on the LCD panel
-
-// define some values used by the panel and buttons
-int lcd_key     = 0;
-int adc_key_in  = 0;
-int currentMenu = 0;
-int lcdStatus   = 0;
-
-// Button Constants
+// PH CONSTANTS
+#define SensorPin A5            //pH meter Analog output to Arduino Analog Input 0
+#define pHOffset 0.08            //deviation compensate updated to compensate
+#define LED 13
+#define samplingInterval 20
+#define ArrayLenth  40    //times of collection
+// EC CONSTANTS
+#define StartConvert 0
+#define ReadTemperature 1
+// LCD CONSTANTS
 #define btnRIGHT  0
 #define btnUP     1
 #define btnDOWN   2
 #define btnLEFT   3
 #define btnSELECT 4
 #define btnNONE   5
-
 // Menu Display Status Constants
 #define LCDSLEEP             98
 #define LCDAWAKE             99
@@ -46,6 +47,36 @@ int lcdStatus   = 0;
 #define sensorWLevel        110
 #define mainMenu2           111
 #define menuScrollingSpeed  25
+
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);           // select the pins used on the LCD panel
+
+// define some values used by the panel and buttons
+int lcd_key     = 0;
+int adc_key_in  = 0;
+int currentMenu = 0;
+int lcdStatus   = 0;
+float pHValue = 0.0;
+
+// PH GLOBALS
+int pHArray[ArrayLenth];   //Store the average value of the sensor feedback
+int pHArrayIndex=0;
+
+// EC GLOBAL
+
+
+const float ECfactor = 0.0;
+const byte numReadings = 20;     //the number of sample times
+byte ECsensorPin = A3;  //EC Meter analog output,pin on analog 1
+byte DS18B20_Pin = 2; //DS18B20 signal, pin on digital 2
+unsigned int AnalogSampleInterval=25,printInterval=700,tempSampleInterval=850;  //analog sample interval;serial print interval;temperature sample interval
+unsigned int readings[numReadings];      // the readings from the analog input
+byte index = 0;                  // the index of the current reading
+unsigned long AnalogValueTotal = 0;                  // the running total
+unsigned int AnalogAverage = 0,averageVoltage=0;                // the average
+unsigned long AnalogSampleTime,printTime,tempSampleTime;
+float temperature,ECcurrent;
+//Temperature chip i/o
+OneWire ds(DS18B20_Pin);  // on digital pin 2
 
 int read_LCD_buttons(){               // read the buttons
     adc_key_in = analogRead(0);       // read the value from the sensor
@@ -158,7 +189,8 @@ void displayMenuR(int menu)
     case sensorPH:
       lcd.print("pH Sensor");
       lcd.setCursor(0,1);
-      lcd.print("xx.xx HH:MM:SS");    // Get latest ph reading here
+      lcd.print(pHValue, 2);
+      lcd.print(" HH:MM:SS");    // Get latest ph reading here
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
       }
@@ -171,7 +203,8 @@ void displayMenuR(int menu)
     case sensorEC:
       lcd.print("EC Sensor ms/cm");
       lcd.setCursor(0,1);
-      lcd.print("xx.xx  HH:MM:SS");    // Get latest ph reading here
+      lcd.print(ECcurrent, 2);
+      lcd.print(" HH:MM:SS");    // Get latest ph reading here
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
       }
@@ -182,9 +215,10 @@ void displayMenuR(int menu)
       break;
 
     case sensorWTemp:
-      lcd.print("Water Temp Faren");
+      lcd.print("Water Temp Cel");
       lcd.setCursor(0,1);
-      lcd.print("xxx.xxx HH:MM:SS");    // get latest water temp here
+      lcd.print(temperature, 2);
+      lcd.print(" HH:MM:SS");    // get latest water temp here
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
       }
@@ -328,7 +362,8 @@ void displayMenuL(int menu)
     case sensorPH:
       lcd.print("pH Sensor");
       lcd.setCursor(0,1);
-      lcd.print("xxx.xxx HH:MM:SS");    // Get latest ph reading here
+      lcd.print(pHValue, 2);
+      lcd.print(" HH:MM:SS");    // Get latest ph reading here
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayLeft();
       }
@@ -336,11 +371,13 @@ void displayMenuL(int menu)
         lcd.scrollDisplayRight();
         delay(menuScrollingSpeed);
       }
+      break;
 
       case sensorEC:
         lcd.print("EC Sensor ms/cm");
         lcd.setCursor(0,1);
-        lcd.print("xxx.xxx HH:MM:SS");    // get latest ec reading here
+        lcd.print(ECcurrent,2);
+        lcd.print(" HH:MM:SS");    // get latest ec reading here
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayLeft();
         }
@@ -351,9 +388,10 @@ void displayMenuL(int menu)
         break;
 
       case sensorWTemp:
-        lcd.print("Water Temp Faren");
+        lcd.print("Water Temp Cel");
         lcd.setCursor(0,1);
-        lcd.print("xxx.xxx HH:MM:SS");    // get latest water temp here
+        lcd.print(temperature, 2);
+        lcd.print(" HH:MM:SS");    // get latest water temp here
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayLeft();
         }
@@ -440,17 +478,20 @@ void displayMenu(int menu)
     case sensorPH:
       lcd.print("pH Sensor");
       lcd.setCursor(0,1);
-      lcd.print("xxx.xxx HH:MM:SS");    // Get latest ph reading here
+      lcd.print(pHValue, 2);
+      lcd.print(" HH:MM:SS");    // Get latest ph reading here
       break;
     case sensorEC:
       lcd.print("EC Sensor ms/cm");
       lcd.setCursor(0,1);
-      lcd.print("xxx.xxx HH:MM:SS");    // get latest ec reading here
+      lcd.print(ECcurrent, 2);
+      lcd.print(" HH:MM:SS");    // get latest ec reading here
       break;
     case sensorWTemp:
       lcd.print("Water Temp Faren");
       lcd.setCursor(0,1);
-      lcd.print("xxx.xxx HH:MM:SS");    // get latest water temp here
+      lcd.print(temperature, 2);
+      lcd.print(" HH:MM:SS");    // get latest water temp here
       break;
     case sensorWLevel:
       lcd.print("Water Level HML");
@@ -686,6 +727,7 @@ void processDisplay()
 }
 
 void setup(){
+  // LCD INIT
   lcdStatus = LCDAWAKE;
   lcd.begin(16, 2);               // start the library
   lcd.setCursor(0,0);             // set the LCD cursor   position
@@ -697,5 +739,170 @@ void setup(){
 
 void loop()
 {
+  // measurePH();
+  measureEC();
   processDisplay();
+}
+
+void measureEC()
+{
+  /*
+   Every once in a while,sample the analog value and calculate the average.
+  */
+  if(millis()-AnalogSampleTime>=AnalogSampleInterval)
+  {
+    AnalogSampleTime=millis();
+     // subtract the last reading:
+    AnalogValueTotal = AnalogValueTotal - readings[index];
+    // read from the sensor:
+    readings[index] = analogRead(ECsensorPin);
+    // add the reading to the total:
+    AnalogValueTotal = AnalogValueTotal + readings[index];
+    // advance to the next position in the array:
+    index = index + 1;
+    // if we're at the end of the array...
+    if (index >= numReadings)
+    // ...wrap around to the beginning:
+    index = 0;
+    // calculate the average:
+    AnalogAverage = AnalogValueTotal / numReadings;
+  }
+  /*
+   Every once in a while,MCU read the temperature from the DS18B20 and then let the DS18B20 start the convert.
+   Attention:The interval between start the convert and read the temperature should be greater than 750 millisecond,or the temperature is not accurate!
+  */
+   if(millis()-tempSampleTime>=tempSampleInterval)
+  {
+    tempSampleTime=millis();
+    temperature = TempProcess(ReadTemperature);  // read the current temperature from the  DS18B20
+    TempProcess(StartConvert);                   //after the reading,start the convert for next reading
+  }
+   /*
+   Every once in a while,print the information on the serial monitor.
+  */
+  if(millis()-printTime>=printInterval)
+  {
+    printTime=millis();
+    averageVoltage=AnalogAverage*(float)5000/1024;
+    Serial.print("Analog value:");
+    Serial.print(AnalogAverage);   //analog average,from 0 to 1023
+    Serial.print("    Voltage:");
+    Serial.print(averageVoltage);  //millivolt average,from 0mv to 4995mV
+    Serial.print("mV    ");
+    Serial.print("temp:");
+    Serial.print(temperature);    //current temperature
+    Serial.print("^C     EC:");
+
+    float TempCoefficient=1.0+0.0185*(temperature-25.0);    //temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.0185*(fTP-25.0));
+    float CoefficientVolatge=(float)averageVoltage/TempCoefficient;
+    if(CoefficientVolatge<150)Serial.println("No solution!");   //25^C 1413us/cm<-->about 216mv  if the voltage(compensate)<150,that is <1ms/cm,out of the range
+    else if(CoefficientVolatge>3300)Serial.println("Out of the range!");  //>20ms/cm,out of the range
+    else
+    {
+      if(CoefficientVolatge<=448)ECcurrent=6.84*CoefficientVolatge-64.32;   //1ms/cm<EC<=3ms/cm
+      else if(CoefficientVolatge<=1457)ECcurrent=6.98*CoefficientVolatge-127;  //3ms/cm<EC<=10ms/cm
+      else ECcurrent=5.3*CoefficientVolatge+2278;                           //10ms/cm<EC<20ms/cm
+      ECcurrent/=1000;    //convert us/cm to ms/cm
+      // ECcurrent/=ECfactor;
+      // Serial.print(ECcurrent/ECfactor,2);  //two decimal
+      Serial.println("ms/cm");
+    }
+  }
+}
+/*
+ch=0,let the DS18B20 start the convert;ch=1,MCU read the current temperature from the DS18B20.
+*/
+float TempProcess(bool ch)
+{
+  //returns the temperature from one DS18B20 in DEG Celsius
+  static byte data[12];
+  static byte addr[8];
+  static float TemperatureSum;
+  if(!ch){
+          if ( !ds.search(addr)) {
+              Serial.println("no more sensors on chain, reset search!");
+              ds.reset_search();
+              return 0;
+          }
+          if ( OneWire::crc8( addr, 7) != addr[7]) {
+              Serial.println("CRC is not valid!");
+              return 0;
+          }
+          if ( addr[0] != 0x10 && addr[0] != 0x28) {
+              Serial.print("Device is not recognized!");
+              return 0;
+          }
+          ds.reset();
+          ds.select(addr);
+          ds.write(0x44,1); // start conversion, with parasite power on at the end
+  }
+  else{
+          byte present = ds.reset();
+          ds.select(addr);
+          ds.write(0xBE); // Read Scratchpad
+          for (int i = 0; i < 9; i++) { // we need 9 bytes
+            data[i] = ds.read();
+          }
+          ds.reset_search();
+          byte MSB = data[1];
+          byte LSB = data[0];
+          float tempRead = ((MSB << 8) | LSB); //using two's compliment
+          TemperatureSum = tempRead / 16;
+    }
+          return TemperatureSum;
+}
+
+void measurePH()
+{
+  static unsigned long samplingTime = millis();
+  static unsigned long printTime = millis();
+  static float voltage;
+  if(millis()-samplingTime > samplingInterval)
+  {
+      pHArray[pHArrayIndex++]=analogRead(SensorPin);
+      if(pHArrayIndex==ArrayLenth)pHArrayIndex=0;
+      voltage = avergearray(pHArray, ArrayLenth)*5.0/1024;
+      pHValue = 3.5*voltage+pHOffset;
+      samplingTime=millis();
+  }
+}
+double avergearray(int* arr, int number)
+{
+  int i;
+  int max,min;
+  double avg;
+  long amount=0;
+  if(number<=0){
+    Serial.println("Error number for the array to avraging!/n");
+    return 0;
+  }
+  if(number<5){   //less than 5, calculated directly statistics
+    for(i=0;i<number;i++){
+      amount+=arr[i];
+    }
+    avg = amount/number;
+    return avg;
+  }else{
+    if(arr[0]<arr[1]){
+      min = arr[0];max=arr[1];
+    }
+    else{
+      min=arr[1];max=arr[0];
+    }
+    for(i=2;i<number;i++){
+      if(arr[i]<min){
+        amount+=min;        //arr<min
+        min=arr[i];
+      }else {
+        if(arr[i]>max){
+          amount+=max;    //arr>max
+          max=arr[i];
+        }else{
+          amount+=arr[i]; //min<=arr<=max
+        }
+      }//if
+    }//for
+    avg = (double)amount/(number-2);
+  }//if
+  return avg;
 }
