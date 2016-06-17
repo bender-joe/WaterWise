@@ -5,18 +5,18 @@
  # Product: analog pH meter
  # SKU    : SEN0161
 */
-#define SensorPin A0            //pH meter Analog output to Arduino Analog Input 0
+#define SensorPin A5            //pH meter Analog output to Arduino Analog Input 0
 #define Offset 0.16            //deviation compensate updated to compensate
 #define LED 13
 #define samplingInterval 20
 #define printInterval 800
 #define ArrayLenth  40    //times of collection
 int pHArray[ArrayLenth];   //Store the average value of the sensor feedback
-int pHArrayIndex=0;    
+int pHArrayIndex=0;
 void setup(void)
 {
-  pinMode(LED,OUTPUT);  
-  Serial.begin(9600);  
+  pinMode(LED,OUTPUT);
+  Serial.begin(9600);
   Serial.println("pH meter experiment!");    //Test the serial monitor
 }
 void loop(void)
@@ -59,7 +59,7 @@ double avergearray(int* arr, int number){
     return avg;
   }else{
     if(arr[0]<arr[1]){
-      min = arr[0];max=arr[1];  
+      min = arr[0];max=arr[1];
     }
     else{
       min=arr[1];max=arr[0];
