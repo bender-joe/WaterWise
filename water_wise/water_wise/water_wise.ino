@@ -258,7 +258,8 @@ void displayMenuR(int menu)
     case sensorWLevel:
       lcd.print("Water Level HML");
       lcd.setCursor(0,1);
-      lcd.print("xxxxxxx HH:MM:SS");
+      lcd.print(waterLevelStr);
+      lcd.print(" HH:MM:SS");
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
       }
@@ -435,7 +436,8 @@ void displayMenuL(int menu)
       case sensorWLevel:
         lcd.print("Water Level HML");
         lcd.setCursor(0,1);
-        lcd.print("xxxxxxx HH:MM:SS");
+        lcd.print(waterLevelStr);
+        lcd.print(" HH:MM:SS");
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayLeft();
         }
@@ -531,7 +533,8 @@ void displayMenu(int menu)
     case sensorWLevel:
       lcd.print("Water Level HML");
       lcd.setCursor(0,1);
-      lcd.print("xxxxxxx HH:MM:SS");
+      lcd.print(waterLevelStr);
+      lcd.print(" HH:MM:SS");
       break;
     case sensorATemp:
       lcd.print("Air Temp Faren");
@@ -904,9 +907,8 @@ void measureWL()
 /*
     Helper Functions
 */
-/*
-ch=0,let the DS18B20 start the convert;ch=1,MCU read the current temperature from the DS18B20.
-*/
+
+//ch=0,let the DS18B20 start the convert;ch=1,MCU read the current temperature from the DS18B20.
 float TempProcess(bool ch)
 {
   //returns the temperature from one DS18B20 in DEG Celsius
@@ -947,6 +949,7 @@ float TempProcess(bool ch)
           return TemperatureSum;
 }
 
+// used to get an accurate ph value
 double avergearray(int* arr, int number)
 {
   int i;

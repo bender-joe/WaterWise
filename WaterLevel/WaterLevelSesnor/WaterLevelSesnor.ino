@@ -25,67 +25,36 @@ pinMode(ledPin[i], OUTPUT);
 }
 
 void loop()
-
 {
+  level = 0;
+  for(int i = 0; i < sensors; i++)
+  {
+    if(digitalRead(sensorPin[i]) == LOW)
+    {
+      digitalWrite(ledPin[i], HIGH);
+      level = sensors - i;
+    }
+    else
+    {
+      digitalWrite(ledPin[i], LOW);
+    }
+  }
+  Serial.println("Water level");
 
-level = 0;
-
-for(int i = 0; i < sensors; i++)
-
-{
-
-if(digitalRead(sensorPin[i]) == LOW)
-
-{
-
-digitalWrite(ledPin[i], HIGH);
-
-level = sensors - i;
-
-}
-
-else
-
-{
-
-digitalWrite(ledPin[i], LOW);
-
-}
-
-}
-
-Serial.println("Water level");
-
-switch(level)
-
-{
-
-case 1:
-
-Serial.println("HIGH");
-
-break;
-
-case 2:
-
-Serial.println("AVERAGE");
-
-break;
-
-case 3:
-
-Serial.println("LOW");
-
-break;
-
-default:
-
-Serial.println("NO WATER");
-
-break;
-
-}
-
-delay(50);
-
+  switch(level)
+  {
+    case 1:
+      Serial.println("HIGH");
+      break;
+    case 2:
+      Serial.println("AVERAGE");
+      break;
+    case 3:
+      Serial.println("LOW");
+      break;
+    default:
+      Serial.println("NO WATER");
+      break;
+  }
+  delay(50);
 }
