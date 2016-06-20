@@ -37,7 +37,7 @@
 #define btnLEFT   3
 #define btnSELECT 4
 #define btnNONE   5
-// Menu Display Status Constants
+// MENU DISPLAY STATUS CONSTANTS
 #define LCDSLEEP             98
 #define LCDAWAKE             99
 #define mainMenu            100
@@ -55,7 +55,11 @@
 #define menuScrollingSpeed  25
 #define DHTPIN 3     // what digital pin we're connected to
 #define DHTTYPE DHT11   // DHT 11
-
+// RELAY PINS
+#define LIGHTPIN    20
+#define PUMPPIN     21
+#define AIRSTONEPIN 22
+#define TOGGLEALL   23
 
 //DHT11
 DHT dht(DHTPIN, DHTTYPE);
@@ -102,7 +106,7 @@ OneWire ds(DS18B20_Pin);  // on digital pin 2
 /*
     LCD Code
 */
-// function to process putton input from the LCD Buttons
+// process putton input from the LCD Buttons
 int read_LCD_buttons(){               // read the buttons
     adc_key_in = analogRead(0);       // read the value from the sensor
 
@@ -122,7 +126,7 @@ int read_LCD_buttons(){               // read the buttons
     return btnNONE;                // when all others fail, return this.
 }
 
-// function to scroll right to the indicated menu
+// scroll right to the indicated menu
 // Param: menu : the menu that is to be scrolled righ to display
 void displayMenuR(int menu)
 {
@@ -301,7 +305,7 @@ void displayMenuR(int menu)
   }
 }
 
-// function to scroll left to the indicated menu
+// scroll left to the indicated menu
 // Param: menu : the menu that is to be scrolled righ to display
 void displayMenuL(int menu)
 {
@@ -479,7 +483,7 @@ void displayMenuL(int menu)
   }
 }
 
-// function to display the menu normally
+// display the menu normally
 // Param: menu : the menu that is to be scrolled righ to display
 void displayMenu(int menu)
 {
@@ -769,7 +773,7 @@ void processDisplay()
 }
 
 /*
-    Sensor Measurement Code
+    Sensor Measurement Functions
 */
 // Measure the air temp & humidity from the DHT11
 void measureAirTemp()
@@ -881,7 +885,7 @@ void measureWL()
   // Go read the water level
   for(int i = 0; i < 3; i++)
   {
-    if(digitalRead(wlSensorPins[i]) == LOW)
+    if(digitalRead(wlSensorPins[i]) == HIGH)
     {
       waterLevel = 3 - i;
     }
@@ -902,6 +906,20 @@ void measureWL()
       waterLevelStr = String("EMPTY");
       break;
   }
+}
+
+/*
+    Relay and Pump Control Functions
+*/
+/*  turn on or off a relay controlled component
+    Params:
+    int component : identifies which component to toggle
+    int newPowStatus : power status to change the component to
+*/
+
+void toggleRelayComponent(int component, int newPowStatus)
+{
+
 }
 
 /*
