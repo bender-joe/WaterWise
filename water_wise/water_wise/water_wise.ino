@@ -26,10 +26,9 @@
 #define StartConvert 0
 #define ReadTemperature 1
 // WATER LEVEL CONSTANTS
-#define wlEmpty   0
-#define wlHigh    1
-#define wlMed     2
-#define wlLow     3
+#define wlHigh    31
+#define wlMed     33
+#define wlLow     35
 // LCD CONSTANTS
 #define btnRIGHT  0
 #define btnUP     1
@@ -60,6 +59,10 @@
 #define PUMPPIN     21
 #define AIRSTONEPIN 22
 #define TOGGLEALL   23
+// P_PUMPPINS
+#define PH_UP     40
+#define PH_DOWN   42
+#define NUTRIENT  44
 
 //DHT11
 DHT dht(DHTPIN, DHTTYPE);
@@ -99,6 +102,9 @@ float humidity = 0.0;
 byte wlSensorPins[] = {31, 33, 35}; // {low, med, high}
 int waterLevel = 0;
 String waterLevelStr;
+
+// RELAY PINS GLOBALS
+
 
 //Temperature chip i/o
 OneWire ds(DS18B20_Pin);  // on digital pin 2
@@ -576,12 +582,16 @@ void processDisplay()
               /*lcd.noDisplay();*/
               break;
             case powerAll:              // @ power all menu
+              toggleRelayComponent(TOGGLEALL, 1);
               break;                    // power on all relay
             case powerMainPump:         // @ power main pump menu
+              toggleRelayComponent(PUMPPIN, 1);
               break;                    // turn on main pump relay
             case powerAirStone:         // @ power air stone menu
+              toggleRelayComponent(AIRSTONEPIN, 1);
               break;                    // turn on air stone relay
             case powerLight:            // @ power light menu
+              toggleRelayComponent(LIGHTPIN, 1);
               break;                    // turn on light relay
             default: break;
           }
@@ -596,12 +606,16 @@ void processDisplay()
               displayMenu(currentMenu); // display power all
               break;
             case powerAll:              // @ power all menu
+              toggleRelayComponent(TOGGLEALL, 0);
               break;                    // power off all relay
             case powerMainPump:         // @ power main pump menu
+              toggleRelayComponent(PUMPPIN, 0);
               break;                    // turn off main pump relay
             case powerAirStone:         // @ power air stone menu
+              toggleRelayComponent(AIRSTONEPIN, 0);
               break;                    // turn off air stone relay
             case powerLight:            // @ power light menu
+              toggleRelayComponent(LIGHTPIN, 0);
               break;                    // turn off light relay
             default: break;
           }
@@ -919,7 +933,33 @@ void measureWL()
 
 void toggleRelayComponent(int component, int newPowStatus)
 {
-
+  switch (newPowStatus)
+  {
+    case 1:
+      if(component == TOGGLEALL)
+      {
+        digitalWrite(LIGHTPIN, HIGH);
+        digitalWrite(AIRSTONEPIN, HIGH);
+        digitalWrite(PUMPPIN, HIGH);
+      } else
+      {
+        digitalWrite(component, HIGH);
+      }
+      break;
+    case 0:
+    if(component == TOGGLEALL)
+    {
+      digitalWrite(LIGHTPIN, LOW);
+      digitalWrite(AIRSTONEPIN, LOW);
+      digitalWrite(PUMPPIN, LOW);
+    } else
+    {
+      digitalWrite(component, LOW);
+    }
+      break;
+    default:
+      break;
+  }
 }
 
 /*
@@ -1022,11 +1062,23 @@ void setup(){
   lcd.print("Sensors");
   currentMenu = mainMenu;
   dht.begin();
+
+  //SETUP PINMODES
+  // WL
+  pinMode(wlHigh, INPUT);
+  pinMode(wlMed, INPUT);
+  pinMode(wlLow, INPUT);
+  // RELAY
+  pinMode(LIGHTPIN, OUTPUT);
+  pinMode(PUMPPIN, OUTPUT);
+  pinMode(AIRSTONEPIN, OUTPUT);
+  pinMode(TOGGLEALL, OUTPUT);
+
 }
 void loop()
 {
-  // measurePH();
-  // measureEC();
+  measurePH();
+  measureEC();
   measureWL();
   measureAirTemp();
   processDisplay();
