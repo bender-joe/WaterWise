@@ -6,8 +6,8 @@
   Dev Items:
     - LCD Menu          - Complete
     - Wifi Comms        - TODO
-    - Sensor Pull Data  - TODO
-    - Relay Signaling   - TODO
+    - Sensor Pull Data  - COMPLETE
+    - Relay Signaling   - COMPLETE
     - P_Pumps Signaling - TODO
 
 **************************************************************************************/
@@ -15,6 +15,7 @@
 #include <LiquidCrystal.h>
 #include <OneWire.h>
 #include "DHT.h"
+#include <SimpleTimer.h>
 
 // PH CONSTANTS
 #define SensorPin A5            //pH meter Analog output to Arduino Analog Input 0
@@ -103,7 +104,8 @@ byte wlSensorPins[] = {31, 33, 35}; // {low, med, high}
 int waterLevel = 0;
 String waterLevelStr;
 
-// RELAY PINS GLOBALS
+SimpleTimer timer;
+int runningPump = 0;
 
 
 //Temperature chip i/o
@@ -962,6 +964,19 @@ void toggleRelayComponent(int component, int newPowStatus)
   }
 }
 
+void stopPump()
+{
+    digitalWrite(runningPump, LOW);
+}
+
+void runPump(int pump, unsigned long durationMS)
+{
+  unsigned long prev = 0;
+  unsigned long current = millis();
+  runningPump = pump;
+  digitalWrite(pump, HIGH);
+  timer.setTimeout(durationMS, stopPump );
+}
 /*
     Helper Functions
 */
@@ -1073,6 +1088,15 @@ void setup(){
   pinMode(PUMPPIN, OUTPUT);
   pinMode(AIRSTONEPIN, OUTPUT);
   pinMode(TOGGLEALL, OUTPUT);
+  // P_PUMP
+  pinMode(PH_DOWN, OUTPUT);
+  pinMode(PH_UP, OUTPUT);
+  pinMode(NUTRIENT, OUTPUT);
+  //make sure the pumps are off
+  digitalWrite(PH_DOWN, LOW);
+  digitalWrite(PH_UP, LOW);
+  digitalWrite(NUTRIENT, LOW);
+
 
 }
 void loop()
