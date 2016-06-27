@@ -65,6 +65,19 @@
 #define PH_DOWN   42
 #define NUTRIENT  44
 
+// WIFI GLOBALS
+#define SSID        "Nucking Futs"                                // Wifi SSID
+#define PASS        "ihateyou"                                    // WiFi Password
+#define TIMEOUT     5000                                          // mS
+#define CONTINUE    false                                         // Define for readability
+#define HALT        true                                          // Define for readibility
+boolean reading;                                                  // Bool for some indication of something
+String responseString = "";                                       // Response string from server for .JSON page
+boolean apMode = true;
+String welcomeWebPage = "HTTP/1.1 200 OK Content-Type: text/html <!DOCTYPE HTML><html><h1>Hello Wordl</h1></html>";
+#define DEBUG true
+
+
 //DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -111,11 +124,211 @@ int runningPump = 0;
 //Temperature chip i/o
 OneWire ds(DS18B20_Pin);  // on digital pin 2
 
+
+/*
+    Wifi Code Start
+*/
+/*
+* Name: sendData
+* Description: Function used to send data to Serial1.
+* Params: command - the data/command to send; timeout - the time to wait for a response; debug - print to Serial window?(true = yes, false = no)
+* Returns: The response from the Serial1 (if there is a reponse)
+*/
+String sendData(String command, const int timeout, boolean debug)
+{
+    String response = "";
+
+    int dataSize = command.length();
+    char data[dataSize];
+    command.toCharArray(data,dataSize);
+
+    Serial1.write(data,dataSize); // send the read character to the Serial1
+    if(debug)
+    {
+      Serial.println("\r\n====== HTTP Response From Arduino ======");
+      Serial.write(data,dataSize);
+      Serial.println("\r\n========================================");
+    }
+
+    long int time = millis();
+
+    while( (time+timeout) > millis())
+    {
+      while(Serial1.available())
+      {
+
+        // The esp has data so display its output to the serial window
+        char c = Serial1.read(); // read the next character.
+        response+=c;
+      }
+    }
+
+    if(debug)
+    {
+      Serial.print(response);
+    }
+
+    return response;
+}
+
+/*
+* Name: sendHTTPResponse
+* Description: Function that sends HTTP 200, HTML UTF-8 response
+*/
+void sendHTTPResponse(int connectionId, String content)
+{
+
+     // build HTTP response
+     String httpResponse;
+     String httpHeader;
+     // HTTP Header
+     httpHeader = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n";
+     httpHeader += "Content-Length: ";
+     httpHeader += content.length();
+     httpHeader += "\r\n";
+     httpHeader +="Connection: close\r\n\r\n";
+     httpResponse = httpHeader + content + " "; // There is a bug in this code: the last character of "content" is not sent, I cheated by adding this extra space
+     sendCIPData(connectionId,httpResponse);
+}
+
+/*
+* Name: sendCIPDATA
+* Description: sends a CIPSEND=<connectionId>,<data> command
+*
+*/
+void sendCIPData(int connectionId, String data)
+{
+   String cipSend = "AT+CIPSEND=";
+   cipSend += connectionId;
+   cipSend += ",";
+   cipSend +=data.length();
+   cipSend +="\r\n";
+   sendCommand(cipSend,1000,DEBUG);
+   sendData(data,1000,DEBUG);
+}
+
+/*
+* Name: sendCommand
+* Description: Function used to send data to Serial1.
+* Params: command - the data/command to send; timeout - the time to wait for a response; debug - print to Serial window?(true = yes, false = no)
+* Returns: The response from the Serial1 (if there is a reponse)
+*/
+String sendCommand(String command, const int timeout, boolean debug)
+{
+    String response = "";
+
+    Serial1.print(command); // send the read character to the Serial1
+
+    long int time = millis();
+
+    while( (time+timeout) > millis())
+    {
+      while(Serial1.available())
+      {
+
+        // The esp has data so display its output to the serial window
+        char c = Serial1.read(); // read the next character.
+        response+=c;
+      }
+    }
+
+    if(debug)
+    {
+      Serial.print(response);
+    }
+
+    return response;
+}
+
+/*
+  Purpose: Sets up the wifi module in AP mode to host HTML page
+  Communication with module through Serial1 (pins 18,19) on Mega2560
+*/
+void initWifiModule()
+{
+  Serial.begin(115200);
+  Serial1.begin(115200); // your esp's baud rate might be different
+
+  pinMode(11,OUTPUT);
+  digitalWrite(11,LOW);
+
+  pinMode(12,OUTPUT);
+  digitalWrite(12,LOW);
+
+  pinMode(13,OUTPUT);
+  digitalWrite(13,LOW);
+
+  pinMode(10,OUTPUT);
+  digitalWrite(10,LOW);
+
+  sendCommand("AT+RST\r\n",2000,DEBUG); // reset module
+  sendCommand("AT+CWMODE=1\r\n",1000,DEBUG); // configure as access point
+  sendCommand("AT+CWJAP=\"Nucking Futs\",\"ihateyou\"\r\n",3000,DEBUG);
+  delay(10000);
+  sendCommand("AT+CIFSR\r\n",1000,DEBUG); // get ip address
+  sendCommand("AT+CIPMUX=1\r\n",1000,DEBUG); // configure for multiple connections
+  sendCommand("AT+CIPSERVER=1,80\r\n",1000,DEBUG); // turn on server on port 80
+
+  Serial.println("Server Ready");
+}
+
+void checkWifiComm()
+{
+  if(Serial1.available()) // check if the esp is sending a message
+  {
+    if(Serial1.find((char*)"+IPD,"))
+    {
+     delay(1000); // wait for the serial buffer to fill up (read all the serial data)
+     // get the connection id so that we can then disconnect
+     int connectionId = Serial1.read()-48; // subtract 48 because the read() function returns
+                                           // the ASCII decimal value and 0 (the first decimal number) starts at 48
+
+     Serial1.find((char*)"pin="); // advance cursor to "pin="
+
+     int pinNumber = (Serial1.read()-48); // get first number i.e. if the pin 13 then the 1st number is 1
+     int secondNumber = (Serial1.read()-48);
+     if(secondNumber>=0 && secondNumber<=9)
+     {
+      pinNumber*=10;
+      pinNumber +=secondNumber; // get second number, i.e. if the pin number is 13 then the 2nd number is 3, then add to the first number
+     }
+
+     digitalWrite(pinNumber, !digitalRead(pinNumber)); // toggle pin
+
+     // build string that is send back to device that is requesting pin toggle
+     String content;
+     content = "Pin ";
+     content += pinNumber;
+     content += " is ";
+
+     if(digitalRead(pinNumber))
+     {
+       content += "ON";
+     }
+     else
+     {
+       content += "OFF";
+     }
+
+     sendHTTPResponse(connectionId,content);
+
+     // make close command
+     String closeCommand = "AT+CIPCLOSE=";
+     closeCommand+=connectionId; // append connection id
+     closeCommand+="\r\n";
+
+     sendCommand(closeCommand,1000,DEBUG); // close connection
+    }
+  }
+}
+
+
 /*
     LCD Code
 */
 // process putton input from the LCD Buttons
-int read_LCD_buttons(){               // read the buttons
+int read_LCD_buttons()
+{               // read the buttons
     adc_key_in = analogRead(0);       // read the value from the sensor
 
     // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
@@ -802,13 +1015,13 @@ void measureAirTemp()
     samplingTime = millis();
   }
   if (isnan(airTemp) || isnan(humidity)) {
-    Serial.println("Failed to read from DHT sensor!");
+    // Serial.println("Failed to read from DHT sensor!");
     return;
   }
-  Serial.print("Temperature = ");
-  Serial.println(airTemp);
-  Serial.print("Humidity = ");
-  Serial.println(humidity);
+  // Serial.print("Temperature = ");
+  // Serial.println(airTemp);
+  // Serial.print("Humidity = ");
+  // Serial.println(humidity);
 }
 
 // Measure the pH from the DFRobot ph Sensor
@@ -868,19 +1081,21 @@ void measureEC()
   {
     printTime=millis();
     averageVoltage=AnalogAverage*(float)5000/1024;
-    Serial.print("Analog value:");
-    Serial.print(AnalogAverage);   //analog average,from 0 to 1023
-    Serial.print("    Voltage:");
-    Serial.print(averageVoltage);  //millivolt average,from 0mv to 4995mV
-    Serial.print("mV    ");
-    Serial.print("temp:");
-    Serial.print(temperature);    //current temperature
-    Serial.print("^C     EC:");
+    // Serial.print("Analog value:");
+    // Serial.print(AnalogAverage);   //analog average,from 0 to 1023
+    // Serial.print("    Voltage:");
+    // Serial.print(averageVoltage);  //millivolt average,from 0mv to 4995mV
+    // Serial.print("mV    ");
+    // Serial.print("temp:");
+    // Serial.print(temperature);    //current temperature
+    // Serial.print("^C     EC:");
 
     float TempCoefficient=1.0+0.0185*(temperature-25.0);    //temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.0185*(fTP-25.0));
     float CoefficientVolatge=(float)averageVoltage/TempCoefficient;
-    if(CoefficientVolatge<150)Serial.println("No solution!");   //25^C 1413us/cm<-->about 216mv  if the voltage(compensate)<150,that is <1ms/cm,out of the range
-    else if(CoefficientVolatge>3300)Serial.println("Out of the range!");  //>20ms/cm,out of the range
+    if(CoefficientVolatge<150)
+      ;// Serial.println("No solution!");   //25^C 1413us/cm<-->about 216mv  if the voltage(compensate)<150,that is <1ms/cm,out of the range
+    else if(CoefficientVolatge>3300)
+      ;// Serial.println("Out of the range!");  //>20ms/cm,out of the range
     else
     {
       if(CoefficientVolatge<=448)ECcurrent=6.84*CoefficientVolatge-64.32;   //1ms/cm<EC<=3ms/cm
@@ -889,7 +1104,7 @@ void measureEC()
       ECcurrent/=1000;    //convert us/cm to ms/cm
       // ECcurrent/=ECfactor;
       // Serial.print(ECcurrent/ECfactor,2);  //two decimal
-      Serial.println("ms/cm");
+      // Serial.println("ms/cm");
     }
   }
 }
@@ -990,16 +1205,16 @@ float TempProcess(bool ch)
   static float TemperatureSum;
   if(!ch){
           if ( !ds.search(addr)) {
-              Serial.println("no more sensors on chain, reset search!");
+              // Serial.println("no more sensors on chain, reset search!");
               ds.reset_search();
               return 0;
           }
           if ( OneWire::crc8( addr, 7) != addr[7]) {
-              Serial.println("CRC is not valid!");
+              // Serial.println("CRC is not valid!");
               return 0;
           }
           if ( addr[0] != 0x10 && addr[0] != 0x28) {
-              Serial.print("Device is not recognized!");
+              // Serial.print("Device is not recognized!");
               return 0;
           }
           ds.reset();
@@ -1067,7 +1282,12 @@ double avergearray(int* arr, int number)
 /*
     Arduino Setup Loop Code
 */
-void setup(){
+void setup()
+{
+  // WIFI INIT
+
+  initWifiModule();
+
   // LCD INIT
   lcdStatus = LCDAWAKE;
   lcd.begin(16, 2);               // start the library
@@ -1099,8 +1319,10 @@ void setup(){
 
 
 }
+
 void loop()
 {
+  checkWifiComm();
   measurePH();
   measureEC();
   measureWL();
