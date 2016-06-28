@@ -185,7 +185,7 @@ void sendHTTPResponse(int connectionId, String content)
      httpHeader += "Content-Length: ";
      httpHeader += content.length();
      httpHeader += "\r\n";
-     httpHeader +="Connection: keep-alive\r\n\r\n";
+     httpHeader +="Connection: close\r\n\r\n";
      httpResponse = httpHeader + content + " "; // There is a bug in this code: the last character of "content" is not sent, I cheated by adding this extra space
      sendCIPData(connectionId,httpResponse);
 }
@@ -282,6 +282,39 @@ void initWifiModule()
 
 }
 
+boolean tryConnectToWifi(String ssid, String pass)
+{
+  Serial.println("Tryting to connect to wifi");
+  // if esp is available
+    delay(1000);
+    if(Serial1.available())
+    {
+      Serial.println("About to send connect command");
+      String wifiConnected = "WIFI CONNECTED";
+      String response = "";
+      String connectToAp="AT+CWJAP=\"";
+      connectToAp += ssid;
+      connectToAp += "\",\"";
+      connectToAp += pass;
+      connectToAp += "\"\r\n";
+      // try to set in both softAp mode
+      delay(5000);
+      sendCommand("AT+CWMODE=3\r\n", 1000, DEBUG);
+      response = sendCommand(connectToAp, 3000, DEBUG);
+
+      // check the response
+      if(response.indexOf(wifiConnected) == -1 )
+      {
+        Serial.println("Didn't find an OK response");
+        return false;
+      }
+      // if we got true, then we are gucci
+      Serial.println("Got the connected to the specified ssid with password");
+      return true;
+    }
+    return false;
+}
+
 void checkWifiComm()
 {
   if(Serial1.available()) // check if the esp is sending a message
@@ -352,6 +385,17 @@ void checkWifiComm()
             Serial.println("Got the ssid and password from a client:");
             Serial.println(configSSID);
             Serial.println(configPass);
+          }
+          // here i need to cleanse the ssid and password
+          // replace '+' with the space
+          configSSID.replace("+", " ");
+          // now go and try to connect to the specified ssid and password combination]
+          if(tryConnectToWifi(configSSID, configPass))
+          {
+            // send an httpResponse to client with the ipaddress, and post it in the response
+            //get the IP adddress
+            sendCommand("AT+CIFSR\r\n", 3000, DEBUG);
+            // close the server connection, set the apmode to false, now device should be on the wifi
           }
         }
 
