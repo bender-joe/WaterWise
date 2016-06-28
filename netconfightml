@@ -1,0 +1,1 @@
+<h1>WaterWise Network Connection<h1><h2>Enter the ssid and password of your network</h2><form method="get">SSID: <input type="text" name="ssid"></input><br>Pass: <input type="text" name="pass"></input><br><input type="submit" value="Submit"></form>

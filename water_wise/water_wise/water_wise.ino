@@ -15,6 +15,7 @@
 #include <LiquidCrystal.h>
 #include <OneWire.h>
 #include "DHT.h"
+#include "ESP8266.h"
 #include <SimpleTimer.h>
 
 // PH CONSTANTS
@@ -64,18 +65,16 @@
 #define PH_UP     40
 #define PH_DOWN   42
 #define NUTRIENT  44
+#define DEBUG     true
 
 // WIFI GLOBALS
 #define SSID        "Nucking Futs"                                // Wifi SSID
 #define PASS        "ihateyou"                                    // WiFi Password
 #define TIMEOUT     5000                                          // mS
-#define CONTINUE    false                                         // Define for readability
-#define HALT        true                                          // Define for readibility
 boolean reading;                                                  // Bool for some indication of something
-String responseString = "";                                       // Response string from server for .JSON page
 boolean apMode = true;
-String welcomeWebPage = "HTTP/1.1 200 OK Content-Type: text/html <!DOCTYPE HTML><html><h1>Hello Wordl</h1></html>";
-#define DEBUG true
+String configSSID = "";
+String configPass = "";
 
 
 //DHT11
@@ -186,7 +185,7 @@ void sendHTTPResponse(int connectionId, String content)
      httpHeader += "Content-Length: ";
      httpHeader += content.length();
      httpHeader += "\r\n";
-     httpHeader +="Connection: close\r\n\r\n";
+     httpHeader +="Connection: keep-alive\r\n\r\n";
      httpResponse = httpHeader + content + " "; // There is a bug in this code: the last character of "content" is not sent, I cheated by adding this extra space
      sendCIPData(connectionId,httpResponse);
 }
@@ -244,9 +243,21 @@ String sendCommand(String command, const int timeout, boolean debug)
   Purpose: Sets up the wifi module in AP mode to host HTML page
   Communication with module through Serial1 (pins 18,19) on Mega2560
 */
+void initWifiModAP()
+{
+  Serial1.begin(115200);
+  apMode = true;
+  sendCommand("AT+RST\r\n",2000,DEBUG);             // reset module
+  sendCommand("AT+CWMODE=2\r\n",1000,DEBUG);        // configure as access point
+  sendCommand("AT+CIFSR\r\n",1000,DEBUG);           // get the current ip address
+  sendCommand("AT+CIPMUX=1\r\n",1000, DEBUG);       // configure for multiple connections
+  sendCommand("AT+CIPSERVER=1,80\r\n",1000,DEBUG);  // turn on server on port 80
+
+  Serial.println("Server Ready");
+}
+
 void initWifiModule()
 {
-  Serial.begin(115200);
   Serial1.begin(115200); // your esp's baud rate might be different
 
   pinMode(11,OUTPUT);
@@ -269,56 +280,94 @@ void initWifiModule()
   sendCommand("AT+CIPMUX=1\r\n",1000,DEBUG); // configure for multiple connections
   sendCommand("AT+CIPSERVER=1,80\r\n",1000,DEBUG); // turn on server on port 80
 
-  Serial.println("Server Ready");
 }
 
 void checkWifiComm()
 {
   if(Serial1.available()) // check if the esp is sending a message
   {
+    // check for a repsonse from a client with the ssid & password
     if(Serial1.find((char*)"+IPD,"))
     {
-     delay(1000); // wait for the serial buffer to fill up (read all the serial data)
-     // get the connection id so that we can then disconnect
-     int connectionId = Serial1.read()-48; // subtract 48 because the read() function returns
-                                           // the ASCII decimal value and 0 (the first decimal number) starts at 48
+      if(apMode == false)
+      {                                         // if wifi module not in AP mode, is conn to network
+        delay(1000);                            // wait for the serial buffer to fill up (read all the serial data)
+                                                // get the connection id so that we can then disconnect
+        int connectionId = Serial1.read()-48;   // subtract 48 because the read() function returns
+                                                // the ASCII decimal value and 0 (the first decimal number) starts at 48
+        Serial1.find((char*)"pin=");            // advance cursor to "pin=" Expecting: IPaddress/?pin=XX
+        int pinNumber = (Serial1.read()-48);    // get first number i.e. if the pin 13 then the 1st number is 1
+        int secondNumber = (Serial1.read()-48);
+        if(secondNumber>=0 && secondNumber<=9)
+        {
+          pinNumber*=10;
+          pinNumber +=secondNumber; // get second number, i.e. if the pin number is 13 then the 2nd number is 3, then add to the first number
+        }
 
-     Serial1.find((char*)"pin="); // advance cursor to "pin="
+        digitalWrite(pinNumber, !digitalRead(pinNumber)); // toggle pin
 
-     int pinNumber = (Serial1.read()-48); // get first number i.e. if the pin 13 then the 1st number is 1
-     int secondNumber = (Serial1.read()-48);
-     if(secondNumber>=0 && secondNumber<=9)
-     {
-      pinNumber*=10;
-      pinNumber +=secondNumber; // get second number, i.e. if the pin number is 13 then the 2nd number is 3, then add to the first number
-     }
+        // build string that is send back to device that is requesting pin toggle
+        String content;
+        content = "Pin ";
+        content += pinNumber;
+        content += " is ";
 
-     digitalWrite(pinNumber, !digitalRead(pinNumber)); // toggle pin
+        if(digitalRead(pinNumber))
+        {
+          content += "ON";
+        }
+        else
+        {
+          content += "OFF";
+        }
 
-     // build string that is send back to device that is requesting pin toggle
-     String content;
-     content = "Pin ";
-     content += pinNumber;
-     content += " is ";
+        sendHTTPResponse(connectionId,content);
 
-     if(digitalRead(pinNumber))
-     {
-       content += "ON";
-     }
-     else
-     {
-       content += "OFF";
-     }
+        // make close command
+        String closeCommand = "AT+CIPCLOSE=";
+        closeCommand+=connectionId; // append connection id
+        closeCommand+="\r\n";
 
-     sendHTTPResponse(connectionId,content);
+        sendCommand(closeCommand,1000,DEBUG); // close connection
+      }
+      else    // wifi module is in AP mode
+      {
+        delay(3000);    // wait for the buffer to fill
 
-     // make close command
-     String closeCommand = "AT+CIPCLOSE=";
-     closeCommand+=connectionId; // append connection id
-     closeCommand+="\r\n";
+        int connectionId = Serial1.read()-48;   // subtract 48 because the read() function returns
 
-     sendCommand(closeCommand,1000,DEBUG); // close connection
+        // check for response from the user
+        if(Serial1.find((char*)"GET /?ssid=" ))
+        {
+          // get the ssid from the get request String
+          configSSID = Serial1.readStringUntil('&');
+
+          // move the cursor to ge the password
+          Serial1.find((char*)"pass=");
+
+          // get the password
+          configPass = Serial1.readStringUntil(' ');
+          if(DEBUG)
+          {
+            Serial.println("Got the ssid and password from a client:");
+            Serial.println(configSSID);
+            Serial.println(configPass);
+          }
+        }
+
+        String netconfig = "<h1>WaterWise Network Connection<h1><h2>Enter the ssid and password of your network</h2><form method=\"get\">SSID: <input type=\"text\" name=\"ssid\" required></input><br>Pass: <input type=\"password\" name=\"pass\" required></input><br><input type=\"submit\" value=\"Submit\"></form>";
+
+        sendHTTPResponse(connectionId,netconfig);
+
+        // String closeCommand = "AT+CIPCLOSE=";
+        // closeCommand+=connectionId; // append connection id
+        // closeCommand+="\r\n";
+        //
+        // sendCommand(closeCommand,1000,DEBUG); // close connection
+
+      }
     }
+
   }
 }
 
@@ -1285,8 +1334,8 @@ double avergearray(int* arr, int number)
 void setup()
 {
   // WIFI INIT
-
-  initWifiModule();
+  Serial.begin(115200);
+  initWifiModAP();
 
   // LCD INIT
   lcdStatus = LCDAWAKE;
