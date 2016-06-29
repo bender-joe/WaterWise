@@ -300,7 +300,7 @@ boolean tryConnectToWifi(String ssid, String pass)
       // try to set in both softAp mode
       delay(5000);
       sendCommand("AT+CWMODE=3\r\n", 1000, DEBUG);
-      response = sendCommand(connectToAp, 3000, DEBUG);
+      response = sendCommand(connectToAp, 5000, DEBUG);
 
       // check the response
       if(response.indexOf(wifiConnected) == -1 )
@@ -313,6 +313,22 @@ boolean tryConnectToWifi(String ssid, String pass)
       return true;
     }
     return false;
+}
+
+String getHtmlIpDisplay(int index, String content)
+{
+  Serial.println("Trying to get the ip address to display in html");
+  String result = "";
+  int i = 0;
+  for(i = 0; i < content.length(); i++)
+  {
+    if(content.substring(i, i+1).equals("\""))
+    {
+      return result;
+    }
+    result += content.substring(i, i+1);
+  }
+  return result;
 }
 
 void checkWifiComm()
@@ -366,7 +382,7 @@ void checkWifiComm()
       else    // wifi module is in AP mode
       {
         delay(3000);    // wait for the buffer to fill
-
+        String htmlIpDisplay = "";
         int connectionId = Serial1.read()-48;   // subtract 48 because the read() function returns
 
         // check for response from the user
@@ -392,15 +408,32 @@ void checkWifiComm()
           // now go and try to connect to the specified ssid and password combination]
           if(tryConnectToWifi(configSSID, configPass))
           {
+            String ipResponse = "";
+            String stationIpLabel = "+CIFSR:STAIP,";
             // send an httpResponse to client with the ipaddress, and post it in the response
             //get the IP adddress
-            sendCommand("AT+CIFSR\r\n", 3000, DEBUG);
+            // Wait for the HTTP response from the device to go through
+            delay(3000);
+            ipResponse = sendCommand("AT+CIFSR\r\n", 3000, DEBUG);
             // close the server connection, set the apmode to false, now device should be on the wifi
+            // read the response from the
+            int index = ipResponse.indexOf(stationIpLabel);     // try to obtain the ip address
+            Serial.println("Read the response of the IP address, lets check it");
+            if(index != -1)
+            {
+              Serial.println("found the station Ip label, go get the html ip to display");
+              htmlIpDisplay = getHtmlIpDisplay(index+1, ipResponse.substring(index+14));
+              Serial.println("HTML IP: "+htmlIpDisplay);
+            }
           }
         }
 
-        String netconfig = "<h1>WaterWise Network Connection<h1><h2>Enter the ssid and password of your network</h2><form method=\"get\">SSID: <input type=\"text\" name=\"ssid\" required></input><br>Pass: <input type=\"password\" name=\"pass\" required></input><br><input type=\"submit\" value=\"Submit\"></form>";
-
+        String netconfig = "<h1>WaterWise Network Connection</h1><h2>Enter the ssid and password of your network</h2><form method=\"get\">SSID: <input type=\"text\" name=\"ssid\" required></input><br>Pass: <input type=\"password\" name=\"pass\" required></input><br><input type=\"submit\" value=\"Connect\"></form>";
+        if(!htmlIpDisplay.equals(""))
+        {
+          netconfig += "<h3>ASSIGNED IP ADDRESS:  "+htmlIpDisplay+"</h3>";
+          netconfig += "<h3>ASSIGNED PORT NUMBER: 80</h3>";
+        }
         sendHTTPResponse(connectionId,netconfig);
 
         // String closeCommand = "AT+CIPCLOSE=";
