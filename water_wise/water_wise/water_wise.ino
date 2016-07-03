@@ -1,14 +1,7 @@
 /*************************************************************************************
 
-  Joseph Bender (2016)
   Senior Design Project
   WaterWise atmega2560 code
-  Dev Items:
-    - LCD Menu          - Complete
-    - Wifi Comms        - TODO
-    - Sensor Pull Data  - COMPLETE
-    - Relay Signaling   - COMPLETE
-    - P_Pumps Signaling - TODO
 
 **************************************************************************************/
 #include <Arduino.h>
@@ -123,15 +116,14 @@ int runningPump = 0;
 //Temperature chip i/o
 OneWire ds(DS18B20_Pin);  // on digital pin 2
 
-
 /*
     Wifi Code Start
 */
 /*
 * Name: sendData
-* Description: Function used to send data to Serial1.
+* Description: Function used to send data to Serial2.
 * Params: command - the data/command to send; timeout - the time to wait for a response; debug - print to Serial window?(true = yes, false = no)
-* Returns: The response from the Serial1 (if there is a reponse)
+* Returns: The response from the Serial2 (if there is a reponse)
 */
 String sendData(String command, const int timeout, boolean debug)
 {
@@ -141,7 +133,7 @@ String sendData(String command, const int timeout, boolean debug)
     char data[dataSize];
     command.toCharArray(data,dataSize);
 
-    Serial1.write(data,dataSize); // send the read character to the Serial1
+    Serial2.write(data,dataSize); // send the read character to the Serial2
     if(debug)
     {
       Serial.println("\r\n====== HTTP Response From Arduino ======");
@@ -153,11 +145,11 @@ String sendData(String command, const int timeout, boolean debug)
 
     while( (time+timeout) > millis())
     {
-      while(Serial1.available())
+      while(Serial2.available())
       {
 
         // The esp has data so display its output to the serial window
-        char c = Serial1.read(); // read the next character.
+        char c = Serial2.read(); // read the next character.
         response+=c;
       }
     }
@@ -176,7 +168,6 @@ String sendData(String command, const int timeout, boolean debug)
 */
 void sendHTTPResponse(int connectionId, String content)
 {
-
      // build HTTP response
      String httpResponse;
      String httpHeader;
@@ -208,25 +199,24 @@ void sendCIPData(int connectionId, String data)
 
 /*
 * Name: sendCommand
-* Description: Function used to send data to Serial1.
+* Description: Function used to send data to Serial2.
 * Params: command - the data/command to send; timeout - the time to wait for a response; debug - print to Serial window?(true = yes, false = no)
-* Returns: The response from the Serial1 (if there is a reponse)
+* Returns: The response from the Serial2 (if there is a reponse)
 */
 String sendCommand(String command, const int timeout, boolean debug)
 {
     String response = "";
 
-    Serial1.print(command); // send the read character to the Serial1
+    Serial2.print(command); // send the read character to the Serial2
 
     long int time = millis();
 
     while( (time+timeout) > millis())
     {
-      while(Serial1.available())
+      while(Serial2.available())
       {
-
         // The esp has data so display its output to the serial window
-        char c = Serial1.read(); // read the next character.
+        char c = Serial2.read(); // read the next character.
         response+=c;
       }
     }
@@ -241,11 +231,11 @@ String sendCommand(String command, const int timeout, boolean debug)
 
 /*
   Purpose: Sets up the wifi module in AP mode to host HTML page
-  Communication with module through Serial1 (pins 18,19) on Mega2560
+  Communication with module through Serial2 (pins 18,19) on Mega2560
 */
 void initWifiModAP()
 {
-  Serial1.begin(115200);
+  Serial2.begin(115200);
   apMode = true;
   sendCommand("AT+RST\r\n",2000,DEBUG);             // reset module
   sendCommand("AT+CWMODE=2\r\n",1000,DEBUG);        // configure as access point
@@ -256,38 +246,13 @@ void initWifiModAP()
   Serial.println("Server Ready");
 }
 
-void initWifiModule()
-{
-  Serial1.begin(115200); // your esp's baud rate might be different
-
-  pinMode(11,OUTPUT);
-  digitalWrite(11,LOW);
-
-  pinMode(12,OUTPUT);
-  digitalWrite(12,LOW);
-
-  pinMode(13,OUTPUT);
-  digitalWrite(13,LOW);
-
-  pinMode(10,OUTPUT);
-  digitalWrite(10,LOW);
-
-  sendCommand("AT+RST\r\n",2000,DEBUG); // reset module
-  sendCommand("AT+CWMODE=1\r\n",1000,DEBUG); // configure as access point
-  sendCommand("AT+CWJAP=\"Nucking Futs\",\"ihateyou\"\r\n",3000,DEBUG);
-  delay(10000);
-  sendCommand("AT+CIFSR\r\n",1000,DEBUG); // get ip address
-  sendCommand("AT+CIPMUX=1\r\n",1000,DEBUG); // configure for multiple connections
-  sendCommand("AT+CIPSERVER=1,80\r\n",1000,DEBUG); // turn on server on port 80
-
-}
 
 boolean tryConnectToWifi(String ssid, String pass)
 {
   Serial.println("Tryting to connect to wifi");
   // if esp is available
     delay(1000);
-    if(Serial1.available())
+    if(Serial2.available())
     {
       Serial.println("About to send connect command");
       String wifiConnected = "WIFI CONNECTED";
@@ -333,20 +298,20 @@ String getHtmlIpDisplay(int index, String content)
 
 void checkWifiComm()
 {
-  if(Serial1.available()) // check if the esp is sending a message
+  if(Serial2.available()) // check if the esp is sending a message
   {
     // check for a repsonse from a client with the ssid & password
-    if(Serial1.find((char*)"+IPD,"))
+    if(Serial2.find((char*)"+IPD,"))
     {
       if(apMode == false)
       {                                         // if wifi module not in AP mode, is conn to network
         delay(1000);                            // wait for the serial buffer to fill up (read all the serial data)
                                                 // get the connection id so that we can then disconnect
-        int connectionId = Serial1.read()-48;   // subtract 48 because the read() function returns
+        int connectionId = Serial2.read()-48;   // subtract 48 because the read() function returns
                                                 // the ASCII decimal value and 0 (the first decimal number) starts at 48
-        Serial1.find((char*)"pin=");            // advance cursor to "pin=" Expecting: IPaddress/?pin=XX
-        int pinNumber = (Serial1.read()-48);    // get first number i.e. if the pin 13 then the 1st number is 1
-        int secondNumber = (Serial1.read()-48);
+        Serial2.find((char*)"pin=");            // advance cursor to "pin=" Expecting: IPaddress/?pin=XX
+        int pinNumber = (Serial2.read()-48);    // get first number i.e. if the pin 13 then the 1st number is 1
+        int secondNumber = (Serial2.read()-48);
         if(secondNumber>=0 && secondNumber<=9)
         {
           pinNumber*=10;
@@ -383,19 +348,19 @@ void checkWifiComm()
       {
         delay(3000);    // wait for the buffer to fill
         String htmlIpDisplay = "";
-        int connectionId = Serial1.read()-48;   // subtract 48 because the read() function returns
+        int connectionId = Serial2.read()-48;   // subtract 48 because the read() function returns
 
         // check for response from the user
-        if(Serial1.find((char*)"GET /?ssid=" ))
+        if(Serial2.find((char*)"GET /?ssid=" ))
         {
           // get the ssid from the get request String
-          configSSID = Serial1.readStringUntil('&');
+          configSSID = Serial2.readStringUntil('&');
 
           // move the cursor to ge the password
-          Serial1.find((char*)"pass=");
+          Serial2.find((char*)"pass=");
 
           // get the password
-          configPass = Serial1.readStringUntil(' ');
+          configPass = Serial2.readStringUntil(' ');
           if(DEBUG)
           {
             Serial.println("Got the ssid and password from a client:");
@@ -415,7 +380,6 @@ void checkWifiComm()
             // Wait for the HTTP response from the device to go through
             delay(3000);
             ipResponse = sendCommand("AT+CIFSR\r\n", 3000, DEBUG);
-            // close the server connection, set the apmode to false, now device should be on the wifi
             // read the response from the
             int index = ipResponse.indexOf(stationIpLabel);     // try to obtain the ip address
             Serial.println("Read the response of the IP address, lets check it");
@@ -433,8 +397,19 @@ void checkWifiComm()
         {
           netconfig += "<h3>ASSIGNED IP ADDRESS:  "+htmlIpDisplay+"</h3>";
           netconfig += "<h3>ASSIGNED PORT NUMBER: 80</h3>";
+          apMode = false;
         }
         sendHTTPResponse(connectionId,netconfig);
+
+        delay(5000);
+
+        // switch the wifi module to only station mode
+        if(apMode == false)
+        {
+          Serial.println("Switching module into station mode");
+          sendCommand("AT+CWMODE=1\r\n", 1000, DEBUG);
+        }
+
 
         // String closeCommand = "AT+CIPCLOSE=";
         // closeCommand+=connectionId; // append connection id
@@ -447,7 +422,6 @@ void checkWifiComm()
 
   }
 }
-
 
 /*
     LCD Code
@@ -1412,7 +1386,12 @@ void setup()
 {
   // WIFI INIT
   Serial.begin(115200);
+
+  pinMode(13,OUTPUT);
+  digitalWrite(13,LOW);
   initWifiModAP();
+
+
 
   // LCD INIT
   lcdStatus = LCDAWAKE;
