@@ -17,13 +17,16 @@
 #define LED 13
 #define samplingInterval 20
 #define ArrayLenth  40    //times of collection
+
 // EC CONSTANTS
 #define StartConvert 0
 #define ReadTemperature 1
+
 // WATER LEVEL CONSTANTS
 #define wlHigh    31
 #define wlMed     33
 #define wlLow     35
+
 // LCD CONSTANTS
 #define btnRIGHT  0
 #define btnUP     1
@@ -31,6 +34,7 @@
 #define btnLEFT   3
 #define btnSELECT 4
 #define btnNONE   5
+
 // MENU DISPLAY STATUS CONSTANTS
 #define LCDSLEEP             98
 #define LCDAWAKE             99
@@ -47,24 +51,35 @@
 #define sensorWLevel        110
 #define mainMenu2           111
 #define menuScrollingSpeed  25
-#define DHTPIN 3     // what digital pin we're connected to
-#define DHTTYPE DHT11   // DHT 11
+#define DHTPIN 3
+#define DHTTYPE DHT11
+
 // RELAY PINS
 #define LIGHTPIN    20
 #define PUMPPIN     21
 #define AIRSTONEPIN 22
 #define TOGGLEALL   23
+
 // P_PUMPPINS
-#define PH_UP     40
-#define PH_DOWN   42
-#define NUTRIENT  44
-#define DEBUG     true
+#define PH_UP       40
+#define PH_DOWN     42
+#define NUTRIENT    44
 
 // WIFI GLOBALS
-#define SSID        "Nucking Futs"                                // Wifi SSID
-#define PASS        "ihateyou"                                    // WiFi Password
-#define TIMEOUT     5000                                          // mS
-boolean reading;                                                  // Bool for some indication of something
+#define DEBUG       true
+#define TIMEOUT     5000
+#define rqPh        1
+#define rqEc        2
+#define rqWTemp     3
+#define rqWLvl      4
+#define rqATemp     5
+#define rqHumid     6
+#define rqAllPwr    7
+#define rqLightPwr  8
+#define rqPumpPwr   9
+#define rqAirPwr    10
+
+boolean reading = false;
 boolean apMode = true;
 String configSSID = "";
 String configPass = "";
@@ -318,10 +333,73 @@ void checkWifiComm()
           pinNumber +=secondNumber; // get second number, i.e. if the pin number is 13 then the 2nd number is 3, then add to the first number
         }
 
+        String content = "";
+        // read the pin number to figure out what to do
+        switch(pinNumber)
+        {
+          case rqPh:
+            Serial.print("sending most recent ph: ");
+            Serial.println(pHValue);
+            content += pHValue;
+            break;
+
+          case rqEc:
+            Serial.print("sending most recent ec: ");
+            Serial.println(ECcurrent);
+            content += ECcurrent;
+            break;
+
+          case rqWTemp:
+            Serial.print("sending most recent wtemp: ");
+            Serial.println(temperature);
+            content += temperature;
+            break;
+
+          case rqWLvl:
+            Serial.println("sending most recent wlvl: " + waterLevelStr);
+            content += waterLevelStr;
+            break;
+
+          case rqATemp:
+            Serial.print("sending most recent air temp: ");
+            Serial.println(airTemp);
+            content += airTemp;
+            break;
+
+          case rqHumid:
+            Serial.println("sending most recent humidity: ");
+            content += humidity;
+            break;
+
+          case rqAllPwr:
+            Serial.println("toggling power to system all");
+            digitalWrite(LIGHTPIN, !digitalRead(LIGHTPIN));
+            digitalWrite(AIRSTONEPIN, !digitalRead(AIRSTONEPIN));
+            digitalWrite(PUMPPIN, !digitalRead(PUMPPIN));
+            break;
+
+          case rqLightPwr:
+            Serial.println("toggling power to lights");
+            digitalWrite(LIGHTPIN, !digitalRead(LIGHTPIN));
+            break;
+
+          case rqAirPwr:
+            Serial.println("toggling power to air stone");
+            digitalWrite(AIRSTONEPIN, !digitalRead(AIRSTONEPIN));
+            break;
+
+          case rqPumpPwr:
+            Serial.println("toggling power to pump");
+            digitalWrite(PUMPPIN, !digitalRead(PUMPPIN));
+            break;
+          default:
+            Serial.println("pin read wrong no match for request");
+            break;
+        }
+
         digitalWrite(pinNumber, !digitalRead(pinNumber)); // toggle pin
 
         // build string that is send back to device that is requesting pin toggle
-        String content;
         content = "Pin ";
         content += pinNumber;
         content += " is ";
@@ -410,16 +488,13 @@ void checkWifiComm()
           sendCommand("AT+CWMODE=1\r\n", 1000, DEBUG);
         }
 
-
         // String closeCommand = "AT+CIPCLOSE=";
         // closeCommand+=connectionId; // append connection id
         // closeCommand+="\r\n";
         //
         // sendCommand(closeCommand,1000,DEBUG); // close connection
-
       }
     }
-
   }
 }
 
