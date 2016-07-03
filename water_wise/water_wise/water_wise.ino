@@ -397,22 +397,7 @@ void checkWifiComm()
             break;
         }
 
-        digitalWrite(pinNumber, !digitalRead(pinNumber)); // toggle pin
-
-        // build string that is send back to device that is requesting pin toggle
-        content = "Pin ";
-        content += pinNumber;
-        content += " is ";
-
-        if(digitalRead(pinNumber))
-        {
-          content += "ON";
-        }
-        else
-        {
-          content += "OFF";
-        }
-
+        // Send the response
         sendHTTPResponse(connectionId,content);
 
         // make close command
