@@ -19,7 +19,7 @@ void setup()
 void loop()
 {
          digitalWrite(RELAY_PIN, HIGH); // turn the relay on (HIGH is the voltage level)
-         delay(2000);   // wait for a second
+         delay(10000);   // wait for a second
          digitalWrite(RELAY_PIN, LOW);   // turn the relay o by making the voltage LOW
-         delay(2000);   // wait for a second
+         delay(5000);   // wait for a second
 }
