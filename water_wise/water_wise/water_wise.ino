@@ -15,12 +15,12 @@
 #define SensorPin A5            //pH meter Analog output to Arduino Analog Input 0
 #define pHOffset 0.08            //deviation compensate updated to compensate
 #define LED 13
-#define samplingInterval 20
+#define phSamplingInterval 20
 #define ArrayLenth  40    //times of collection
 
 // EC CONSTANTS
 #define StartConvert 0
-#define ReadTemperature 1
+#define ReadwaterTemp 1
 
 // WATER LEVEL CONSTANTS
 #define wlHigh    31
@@ -55,9 +55,9 @@
 #define DHTTYPE DHT11
 
 // RELAY PINS
-#define LIGHTPIN    20
-#define PUMPPIN     21
-#define AIRSTONEPIN 22
+#define LIGHTPIN    31
+#define PUMPPIN     41
+#define AIRSTONEPIN 35
 #define TOGGLEALL   23
 
 // P_PUMPPINS
@@ -66,18 +66,22 @@
 #define NUTRIENT    44
 
 // WIFI GLOBALS
-#define DEBUG       true
-#define TIMEOUT     5000
-#define rqPh        1
-#define rqEc        2
-#define rqWTemp     3
-#define rqWLvl      4
-#define rqATemp     5
-#define rqHumid     6
-#define rqAllPwr    7
-#define rqLightPwr  8
-#define rqPumpPwr   9
-#define rqAirPwr    10
+#define DEBUG         true
+#define TIMEOUT       5000
+#define rqPh          1
+#define rqEc          2
+#define rqWTemp       3
+#define rqWLvl        4
+#define rqATemp       5
+#define rqHumid       6
+#define rqAllPwrOn    7
+#define rqAllPwrOff   8
+#define rqLightPwrOn  9
+#define rqLightPwrOff 10
+#define rqPumpPwrOn   11
+#define rqPumpPwrOff  12
+#define rqAirPwrOn    13
+#define rqAirPwrOff   14
 
 boolean reading = false;
 boolean apMode = true;
@@ -106,13 +110,13 @@ const float ECfactor = 0.0;
 const byte numReadings = 20;     //the number of sample times
 byte ECsensorPin = A3;  //EC Meter analog output,pin on analog 1
 byte DS18B20_Pin = 2; //DS18B20 signal, pin on digital 2
-unsigned int AnalogSampleInterval=25,printInterval=700,tempSampleInterval=850;  //analog sample interval;serial print interval;temperature sample interval
+unsigned int AnalogSampleInterval=25,printInterval=700,tempSampleInterval=850;  //analog sample interval;serial print interval;waterTemp sample interval
 unsigned int readings[numReadings];      // the readings from the analog input
 byte index = 0;                  // the index of the current reading
 unsigned long AnalogValueTotal = 0;                  // the running total
 unsigned int AnalogAverage = 0,averageVoltage=0;                // the average
 unsigned long AnalogSampleTime,printTime,tempSampleTime;
-float temperature,ECcurrent;
+float waterTemp,ECValue;
 
 // AIR MEASUREMENT GLOBALS
 unsigned int airTempSampleInterval = 2000;
@@ -128,7 +132,7 @@ SimpleTimer timer;
 int runningPump = 0;
 
 
-//Temperature chip i/o
+//waterTemp chip i/o
 OneWire ds(DS18B20_Pin);  // on digital pin 2
 
 /*
@@ -311,17 +315,21 @@ String getHtmlIpDisplay(int index, String content)
   return result;
 }
 
-void checkWifiComm()
+void communicateWifi()
 {
+  // Serial.println("Checking wifi comms");
   if(Serial2.available()) // check if the esp is sending a message
   {
+    Serial.println("Serial 2 available");
     // check for a repsonse from a client with the ssid & password
     if(Serial2.find((char*)"+IPD,"))
     {
+      Serial.println("found +IPD");
       if(apMode == false)
       {                                         // if wifi module not in AP mode, is conn to network
         delay(1000);                            // wait for the serial buffer to fill up (read all the serial data)
                                                 // get the connection id so that we can then disconnect
+        Serial.println("processing pin request");
         int connectionId = Serial2.read()-48;   // subtract 48 because the read() function returns
                                                 // the ASCII decimal value and 0 (the first decimal number) starts at 48
         Serial2.find((char*)"pin=");            // advance cursor to "pin=" Expecting: IPaddress/?pin=XX
@@ -333,7 +341,7 @@ void checkWifiComm()
           pinNumber +=secondNumber; // get second number, i.e. if the pin number is 13 then the 2nd number is 3, then add to the first number
         }
 
-        String content = "";
+        String content = "no content";
         // read the pin number to figure out what to do
         switch(pinNumber)
         {
@@ -345,14 +353,14 @@ void checkWifiComm()
 
           case rqEc:
             Serial.print("sending most recent ec: ");
-            Serial.println(ECcurrent);
-            content += ECcurrent;
+            Serial.println(ECValue);
+            content += ECValue;
             break;
 
           case rqWTemp:
             Serial.print("sending most recent wtemp: ");
-            Serial.println(temperature);
-            content += temperature;
+            Serial.println(waterTemp);
+            content += waterTemp;
             break;
 
           case rqWLvl:
@@ -371,27 +379,36 @@ void checkWifiComm()
             content += humidity;
             break;
 
-          case rqAllPwr:
-            Serial.println("toggling power to system all");
-            digitalWrite(LIGHTPIN, !digitalRead(LIGHTPIN));
-            digitalWrite(AIRSTONEPIN, !digitalRead(AIRSTONEPIN));
-            digitalWrite(PUMPPIN, !digitalRead(PUMPPIN));
+          case rqLightPwrOn:
+            Serial.println("power ON to lights");
+            digitalWrite(LIGHTPIN, HIGH);
             break;
 
-          case rqLightPwr:
-            Serial.println("toggling power to lights");
-            digitalWrite(LIGHTPIN, !digitalRead(LIGHTPIN));
+          case rqLightPwrOff:
+            Serial.println("power OFF to lights");
+            digitalWrite(LIGHTPIN, LOW);
             break;
 
-          case rqAirPwr:
-            Serial.println("toggling power to air stone");
-            digitalWrite(AIRSTONEPIN, !digitalRead(AIRSTONEPIN));
+          case rqAirPwrOn:
+            Serial.println("power ON to air stone");
+            digitalWrite(AIRSTONEPIN, HIGH);
             break;
 
-          case rqPumpPwr:
-            Serial.println("toggling power to pump");
-            digitalWrite(PUMPPIN, !digitalRead(PUMPPIN));
+          case rqAirPwrOff:
+            Serial.println("power OFF to air stone");
+            digitalWrite(AIRSTONEPIN, LOW);
             break;
+
+          case rqPumpPwrOn:
+            Serial.println("power ON to pump");
+            digitalWrite(PUMPPIN, HIGH);
+            break;
+
+          case rqPumpPwrOff:
+            Serial.println("power OFF to pump");
+            digitalWrite(PUMPPIN, LOW);
+            break;
+
           default:
             Serial.println("pin read wrong no match for request");
             break;
@@ -400,12 +417,13 @@ void checkWifiComm()
         // Send the response
         sendHTTPResponse(connectionId,content);
 
+
         // make close command
         String closeCommand = "AT+CIPCLOSE=";
         closeCommand+=connectionId; // append connection id
         closeCommand+="\r\n";
 
-        sendCommand(closeCommand,1000,DEBUG); // close connection
+        //sendCommand(closeCommand,1000,DEBUG); // close connection
       }
       else    // wifi module is in AP mode
       {
@@ -615,7 +633,7 @@ void displayMenuR(int menu)
     case sensorEC:
       lcd.print("EC Sensor ms/cm");
       lcd.setCursor(0,1);
-      lcd.print(ECcurrent, 2);
+      lcd.print(ECValue, 2);
       lcd.print(" HH:MM:SS");    // Get latest ph reading here
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
@@ -629,7 +647,7 @@ void displayMenuR(int menu)
     case sensorWTemp:
       lcd.print("Water Temp Cel");
       lcd.setCursor(0,1);
-      lcd.print(temperature, 2);
+      lcd.print(waterTemp, 2);
       lcd.print(" HH:MM:SS");    // get latest water temp here
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
@@ -793,7 +811,7 @@ void displayMenuL(int menu)
       case sensorEC:
         lcd.print("EC Sensor ms/cm");
         lcd.setCursor(0,1);
-        lcd.print(ECcurrent,2);
+        lcd.print(ECValue,2);
         lcd.print(" HH:MM:SS");    // get latest ec reading here
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayLeft();
@@ -807,7 +825,7 @@ void displayMenuL(int menu)
       case sensorWTemp:
         lcd.print("Water Temp Cel");
         lcd.setCursor(0,1);
-        lcd.print(temperature, 2);
+        lcd.print(waterTemp, 2);
         lcd.print(" HH:MM:SS");    // get latest water temp here
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayLeft();
@@ -906,13 +924,13 @@ void displayMenu(int menu)
     case sensorEC:
       lcd.print("EC Sensor ms/cm");
       lcd.setCursor(0,1);
-      lcd.print(ECcurrent, 2);
+      lcd.print(ECValue, 2);
       lcd.print(" HH:MM:SS");    // get latest ec reading here
       break;
     case sensorWTemp:
       lcd.print("Water Temp Faren");
       lcd.setCursor(0,1);
-      lcd.print(temperature, 2);
+      lcd.print(waterTemp, 2);
       lcd.print(" HH:MM:SS");    // get latest water temp here
       break;
     case sensorWLevel:
@@ -1178,7 +1196,7 @@ void measureAirTemp()
     // Serial.println("Failed to read from DHT sensor!");
     return;
   }
-  // Serial.print("Temperature = ");
+  // Serial.print("waterTemp = ");
   // Serial.println(airTemp);
   // Serial.print("Humidity = ");
   // Serial.println(humidity);
@@ -1190,7 +1208,7 @@ void measurePH()
   static unsigned long samplingTime = millis();
   static unsigned long printTime = millis();
   static float voltage;
-  if(millis()-samplingTime > samplingInterval)
+  if(millis()-samplingTime > phSamplingInterval)
   {
       pHArray[pHArrayIndex++]=analogRead(SensorPin);
       if(pHArrayIndex==ArrayLenth)pHArrayIndex=0;
@@ -1203,9 +1221,7 @@ void measurePH()
 // Measure the EC and Water Temp
 void measureEC()
 {
-  /*
-   Every once in a while,sample the analog value and calculate the average.
-  */
+  //Every once in a while,sample the analog value and calculate the average.
   if(millis()-AnalogSampleTime>=AnalogSampleInterval)
   {
     AnalogSampleTime=millis();
@@ -1225,13 +1241,13 @@ void measureEC()
     AnalogAverage = AnalogValueTotal / numReadings;
   }
   /*
-   Every once in a while,MCU read the temperature from the DS18B20 and then let the DS18B20 start the convert.
-   Attention:The interval between start the convert and read the temperature should be greater than 750 millisecond,or the temperature is not accurate!
+   Every once in a while,MCU read the waterTemp from the DS18B20 and then let the DS18B20 start the convert.
+   Attention:The interval between start the convert and read the waterTemp should be greater than 750 millisecond,or the waterTemp is not accurate!
   */
-   if(millis()-tempSampleTime>=tempSampleInterval)
+  if(millis()-tempSampleTime>=tempSampleInterval)
   {
     tempSampleTime=millis();
-    temperature = TempProcess(ReadTemperature);  // read the current temperature from the  DS18B20
+    waterTemp = TempProcess(ReadwaterTemp);  // read the current waterTemp from the  DS18B20
     TempProcess(StartConvert);                   //after the reading,start the convert for next reading
   }
    /*
@@ -1241,16 +1257,8 @@ void measureEC()
   {
     printTime=millis();
     averageVoltage=AnalogAverage*(float)5000/1024;
-    // Serial.print("Analog value:");
-    // Serial.print(AnalogAverage);   //analog average,from 0 to 1023
-    // Serial.print("    Voltage:");
-    // Serial.print(averageVoltage);  //millivolt average,from 0mv to 4995mV
-    // Serial.print("mV    ");
-    // Serial.print("temp:");
-    // Serial.print(temperature);    //current temperature
-    // Serial.print("^C     EC:");
 
-    float TempCoefficient=1.0+0.0185*(temperature-25.0);    //temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.0185*(fTP-25.0));
+    float TempCoefficient=1.0+0.0185*(waterTemp-25.0);    //waterTemp compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.0185*(fTP-25.0));
     float CoefficientVolatge=(float)averageVoltage/TempCoefficient;
     if(CoefficientVolatge<150)
       ;// Serial.println("No solution!");   //25^C 1413us/cm<-->about 216mv  if the voltage(compensate)<150,that is <1ms/cm,out of the range
@@ -1258,13 +1266,10 @@ void measureEC()
       ;// Serial.println("Out of the range!");  //>20ms/cm,out of the range
     else
     {
-      if(CoefficientVolatge<=448)ECcurrent=6.84*CoefficientVolatge-64.32;   //1ms/cm<EC<=3ms/cm
-      else if(CoefficientVolatge<=1457)ECcurrent=6.98*CoefficientVolatge-127;  //3ms/cm<EC<=10ms/cm
-      else ECcurrent=5.3*CoefficientVolatge+2278;                           //10ms/cm<EC<20ms/cm
-      ECcurrent/=1000;    //convert us/cm to ms/cm
-      // ECcurrent/=ECfactor;
-      // Serial.print(ECcurrent/ECfactor,2);  //two decimal
-      // Serial.println("ms/cm");
+      if(CoefficientVolatge<=448)ECValue=6.84*CoefficientVolatge-64.32;   //1ms/cm<EC<=3ms/cm
+      else if(CoefficientVolatge<=1457)ECValue=6.98*CoefficientVolatge-127;  //3ms/cm<EC<=10ms/cm
+      else ECValue=5.3*CoefficientVolatge+2278;                           //10ms/cm<EC<20ms/cm
+      ECValue/=1000;    //convert us/cm to ms/cm
     }
   }
 }
@@ -1307,7 +1312,6 @@ void measureWL()
     int component : identifies which component to toggle
     int newPowStatus : power status to change the component to
 */
-
 void toggleRelayComponent(int component, int newPowStatus)
 {
   switch (newPowStatus)
@@ -1356,13 +1360,13 @@ void runPump(int pump, unsigned long durationMS)
     Helper Functions
 */
 
-//ch=0,let the DS18B20 start the convert;ch=1,MCU read the current temperature from the DS18B20.
+//ch=0,let the DS18B20 start the convert;ch=1,MCU read the current waterTemp from the DS18B20.
 float TempProcess(bool ch)
 {
-  //returns the temperature from one DS18B20 in DEG Celsius
+  //returns the waterTemp from one DS18B20 in DEG Celsius
   static byte data[12];
   static byte addr[8];
-  static float TemperatureSum;
+  static float waterTempSum;
   if(!ch){
           if ( !ds.search(addr)) {
               // Serial.println("no more sensors on chain, reset search!");
@@ -1381,20 +1385,21 @@ float TempProcess(bool ch)
           ds.select(addr);
           ds.write(0x44,1); // start conversion, with parasite power on at the end
   }
-  else{
-          byte present = ds.reset();
-          ds.select(addr);
-          ds.write(0xBE); // Read Scratchpad
-          for (int i = 0; i < 9; i++) { // we need 9 bytes
-            data[i] = ds.read();
-          }
-          ds.reset_search();
-          byte MSB = data[1];
-          byte LSB = data[0];
-          float tempRead = ((MSB << 8) | LSB); //using two's compliment
-          TemperatureSum = tempRead / 16;
+  else
+  {
+      byte present = ds.reset();
+      ds.select(addr);
+      ds.write(0xBE); // Read Scratchpad
+      for (int i = 0; i < 9; i++) { // we need 9 bytes
+        data[i] = ds.read();
+      }
+      ds.reset_search();
+      byte MSB = data[1];
+      byte LSB = data[0];
+      float tempRead = ((MSB << 8) | LSB); //using two's compliment
+      waterTempSum = tempRead / 16;
     }
-          return TemperatureSum;
+    return waterTempSum;
 }
 
 // used to get an accurate ph value
@@ -1451,8 +1456,6 @@ void setup()
   digitalWrite(13,LOW);
   initWifiModAP();
 
-
-
   // LCD INIT
   lcdStatus = LCDAWAKE;
   lcd.begin(16, 2);               // start the library
@@ -1481,16 +1484,14 @@ void setup()
   digitalWrite(PH_DOWN, LOW);
   digitalWrite(PH_UP, LOW);
   digitalWrite(NUTRIENT, LOW);
-
-
 }
 
 void loop()
 {
-  checkWifiComm();
-  measurePH();
-  measureEC();
-  measureWL();
-  measureAirTemp();
-  processDisplay();
+  communicateWifi();
+  // measurePH();
+  // measureEC();
+  // measureWL();
+  // measureAirTemp();
+  // processDisplay();
 }
