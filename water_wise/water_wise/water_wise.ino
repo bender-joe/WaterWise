@@ -12,7 +12,7 @@
 #include <SimpleTimer.h>
 
 // PH CONSTANTS
-#define SensorPin A5            //pH meter Analog output to Arduino Analog Input 0
+#define phSensorPin A5            //pH meter Analog output to Arduino Analog Input 0
 #define pHOffset 0.08            //deviation compensate updated to compensate
 #define LED 13
 #define phSamplingInterval 20
@@ -68,7 +68,7 @@
 // WIFI GLOBALS
 #define DEBUG         true
 #define TIMEOUT       5000
-#define rqPh          1
+#define rqSensorData  1
 #define rqEc          2
 #define rqWTemp       3
 #define rqWLvl        4
@@ -82,6 +82,7 @@
 #define rqPumpPwrOff  12
 #define rqAirPwrOn    13
 #define rqAirPwrOff   14
+#define rqPowerStat   15
 
 boolean reading = false;
 boolean apMode = true;
@@ -108,7 +109,7 @@ float pHValue = 0.0;
 // EC GLOBAL
 const float ECfactor = 0.0;
 const byte numReadings = 20;     //the number of sample times
-byte ECsensorPin = A3;  //EC Meter analog output,pin on analog 1
+byte ECphSensorPin = A3;  //EC Meter analog output,pin on analog 1
 byte DS18B20_Pin = 2; //DS18B20 signal, pin on digital 2
 unsigned int AnalogSampleInterval=25,printInterval=700,tempSampleInterval=850;  //analog sample interval;serial print interval;waterTemp sample interval
 unsigned int readings[numReadings];      // the readings from the analog input
@@ -124,9 +125,9 @@ float airTemp = 0.0;
 float humidity = 0.0;
 
 // WATER LEVEL GLOBALS
-byte wlSensorPins[] = {31, 33, 35}; // {low, med, high}
+byte wlphSensorPins[] = {31, 33, 35}; // {low, med, high}
 int waterLevel = 0;
-String waterLevelStr;
+String waterLevelStr = "";
 
 SimpleTimer timer;
 int runningPump = 0;
@@ -254,7 +255,6 @@ String sendCommand(String command, const int timeout, boolean debug)
 */
 void initWifiModAP()
 {
-  Serial2.begin(115200);
   apMode = true;
   sendCommand("AT+RST\r\n",2000,DEBUG);             // reset module
   sendCommand("AT+CWMODE=2\r\n",1000,DEBUG);        // configure as access point
@@ -341,41 +341,37 @@ void communicateWifi()
           pinNumber +=secondNumber; // get second number, i.e. if the pin number is 13 then the 2nd number is 3, then add to the first number
         }
 
-        String content = "no content";
+        String content = "";
         // read the pin number to figure out what to do
         switch(pinNumber)
         {
-          case rqPh:
-            Serial.print("sending most recent ph: ");
+          case rqSensorData:
+            Serial.println("sending most recent sensorvalues: ");
             Serial.println(pHValue);
             content += pHValue;
-            break;
+            content += ",";
 
-          case rqEc:
-            Serial.print("sending most recent ec: ");
+            Serial.println("sending most recent ec: ");
             Serial.println(ECValue);
             content += ECValue;
-            break;
+            content += ",";
 
-          case rqWTemp:
             Serial.print("sending most recent wtemp: ");
             Serial.println(waterTemp);
             content += waterTemp;
-            break;
+            content += ",";
 
-          case rqWLvl:
             Serial.println("sending most recent wlvl: " + waterLevelStr);
             content += waterLevelStr;
-            break;
+            content += ",";
 
-          case rqATemp:
             Serial.print("sending most recent air temp: ");
             Serial.println(airTemp);
             content += airTemp;
-            break;
+            content += ",";
 
-          case rqHumid:
             Serial.println("sending most recent humidity: ");
+            Serial.println(humidity);
             content += humidity;
             break;
 
@@ -407,6 +403,15 @@ void communicateWifi()
           case rqPumpPwrOff:
             Serial.println("power OFF to pump");
             digitalWrite(PUMPPIN, LOW);
+            break;
+
+          case rqPowerStat:
+            content.concat(digitalRead(LIGHTPIN));
+            content += ",";
+            content.concat(digitalRead(AIRSTONEPIN));
+            content += ",";
+            content.concat(digitalRead(PUMPPIN));
+            // Serial.println(content);
             break;
 
           default:
@@ -1210,7 +1215,7 @@ void measurePH()
   static float voltage;
   if(millis()-samplingTime > phSamplingInterval)
   {
-      pHArray[pHArrayIndex++]=analogRead(SensorPin);
+      pHArray[pHArrayIndex++]=analogRead(phSensorPin);
       if(pHArrayIndex==ArrayLenth)pHArrayIndex=0;
       voltage = avergearray(pHArray, ArrayLenth)*5.0/1024;
       pHValue = 3.5*voltage+pHOffset;
@@ -1228,7 +1233,7 @@ void measureEC()
      // subtract the last reading:
     AnalogValueTotal = AnalogValueTotal - readings[index];
     // read from the sensor:
-    readings[index] = analogRead(ECsensorPin);
+    readings[index] = analogRead(ECphSensorPin);
     // add the reading to the total:
     AnalogValueTotal = AnalogValueTotal + readings[index];
     // advance to the next position in the array:
@@ -1281,7 +1286,7 @@ void measureWL()
   // Go read the water level
   for(int i = 0; i < 3; i++)
   {
-    if(digitalRead(wlSensorPins[i]) == HIGH)
+    if(digitalRead(wlphSensorPins[i]) == HIGH)
     {
       waterLevel = 3 - i;
     }
@@ -1450,7 +1455,11 @@ double avergearray(int* arr, int number)
 void setup()
 {
   // WIFI INIT
-  Serial.begin(115200);
+  if(DEBUG)
+  {
+    Serial.begin(115200);
+  }
+  Serial2.begin(115200);
 
   pinMode(13,OUTPUT);
   digitalWrite(13,LOW);
@@ -1489,9 +1498,9 @@ void setup()
 void loop()
 {
   communicateWifi();
-  // measurePH();
-  // measureEC();
-  // measureWL();
-  // measureAirTemp();
-  // processDisplay();
+  measurePH();
+  measureEC();
+  measureWL();
+  measureAirTemp();
+  processDisplay();
 }
