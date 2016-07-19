@@ -68,7 +68,7 @@
 #define LIGHTPIN            37    //relay1ctl
 #define PUMPPIN             36    //relay2ctl
 #define AIRSTONEPIN         35    //relay3ctl
-// #define TOGGLEALL           23
+#define TOGGLEALL           23
 
 // P_PUMPPINS
 #define PH_UP               12    //pump1ctl
@@ -76,6 +76,9 @@
 #define NUTRIENT            10    //pump3ctl
 
 // WIFI GLOBALS
+// ESP TX RX pins are Serial2
+#define Esp_tx        16
+#define Esp_rx        17
 #define DEBUG         true
 #define TIMEOUT       5000
 // HTTP PARAMETER CODES
@@ -94,6 +97,11 @@
 // STATUS FLAGS
 boolean reading = false;
 boolean apMode = true;
+// TIMING GLOBALS
+#define fifteenMins 1200000;
+#define sixtyMins   3600000;
+#define
+
 // SSID HOLDERS
 String configSSID = "";
 String configPass = "";
@@ -121,14 +129,16 @@ static unsigned long phSamplingTime = 0;
 
 // EC GLOBAL
 const float ECfactor = 0.0;
-const byte numReadings = 20;     //the number of sample times
-byte ECphSensorPin = ECpin;  //EC Meter analog output,pin on analog 1
-byte DS18B20_Pin = WtempPin; //DS18B20 signal, pin on digital 2
-unsigned int AnalogSampleInterval=25,printInterval=700,tempSampleInterval=850;  //analog sample interval;serial print interval;waterTemp sample interval
-unsigned int readings[numReadings];      // the readings from the analog input
-byte index = 0;                  // the index of the current reading
-unsigned long AnalogValueTotal = 0;                  // the running total
-unsigned int AnalogAverage = 0,averageVoltage=0;                // the average
+const byte numReadings = 20;                        //the number of sample times
+byte ECphSensorPin = ECpin;             //EC Meter analog output,pin on analog 1
+byte DS18B20_Pin = WtempPin;                  //DS18B20 signal, pin on digital 2
+unsigned int AnalogSampleInterval=25;
+unsigned int printInterval=700;
+unsigned int tempSampleInterval=850;
+unsigned int readings[numReadings];        // the readings from the analog input
+byte index = 0;                             // the index of the current reading
+unsigned long AnalogValueTotal = 0;                         // the running total
+unsigned int AnalogAverage = 0,averageVoltage=0;                  // the average
 unsigned long ECSampleTime,printTime,tempSampleTime;
 static float waterTemp;
 
@@ -237,7 +247,6 @@ void sendHTTPResponse(int connectionId, String content)
 /*
 * Name: sendCIPDATA
 * Description: sends a CIPSEND=<connectionId>,<data> command
-*
 */
 void sendCIPData(int connectionId, String data)
 {
@@ -283,8 +292,9 @@ String sendCommand(String command, const int timeout, boolean debug)
 }
 
 /*
-  Purpose: Sets up the wifi module in AP mode to host HTML page
-  Communication with module through Serial2 (pins 18,19) on Mega2560
+* Name: initWifiModAP
+* Description: Function used to intialize the wifi module in AP mode
+* Purpose: Sets the wifi module in AP mode to host HTML page
 */
 void initWifiModAP()
 {
@@ -295,7 +305,10 @@ void initWifiModAP()
   sendCommand("AT+CIPMUX=1\r\n",1000, DEBUG);       // configure for multiple connections
   sendCommand("AT+CIPSERVER=1,80\r\n",1000,DEBUG);  // turn on server on port 80
 
-  Serial.println("Server Ready");
+  if(DEBUG)
+  {
+    Serial.println("Server Ready");
+  }
 }
 
 boolean tryConnectToWifi(String ssid, String pass)
@@ -347,12 +360,14 @@ String getHtmlIpDisplay(int index, String content)
   return result;
 }
 
+/*
+* Name: communicateWifi
+* Description: handles the wifi communication between esp and MCU
+*/
 void communicateWifi()
 {
-  // Serial.println("Checking wifi comms");
-  if(Serial2.available()) // check if the esp is sending a message
+  if(Serial2.available())               // check if the esp is sending a message
   {
-    Serial.println("Serial 2 available");
     // check for a repsonse from a client with the ssid & password
     if(Serial2.find((char*)"+IPD,"))
     {
@@ -556,12 +571,6 @@ void communicateWifi()
           Serial.println("Switching module into station mode");
           sendCommand("AT+CWMODE=1\r\n", 1000, DEBUG);
         }
-
-        // String closeCommand = "AT+CIPCLOSE=";
-        // closeCommand+=connectionId; // append connection id
-        // closeCommand+="\r\n";
-        //
-        // sendCommand(closeCommand,1000,DEBUG); // close connection
       }
     }
   }
@@ -1003,8 +1012,11 @@ void displayMenu(int menu)
   }
 }
 
-// handles the input of the button presses
-// detemines what to do for each button press
+/*
+* Name: processDisplay
+* Description: handles the input of button presses on the LCD keypad
+*     determines what to do for each button press
+*/
 void processDisplay()
 {
     lcd_key = read_LCD_buttons();
@@ -1032,8 +1044,6 @@ void processDisplay()
               displayMenu(currentMenu); // display power all
               break;
             case mainMenu2:
-                // System Sleep option, turn off the LCD
-                /*lcd.noDisplay();*/
               break;
             default: break;
           }
@@ -1229,9 +1239,10 @@ void processDisplay()
 }
 
 /*
-    Sensor Measurement Functions
+* Name: measureAirTemp
+* Description: if the sampling timer is up, measures the latest air temp &
+*   humidity
 */
-// Measure the air temp & humidity from the DHT11
 void measureAirTemp()
 {
   static unsigned long samplingTime = millis();
@@ -1242,13 +1253,9 @@ void measureAirTemp()
     samplingTime = millis();
   }
   if (isnan(airTemp) || isnan(humidity)) {
-    // Serial.println("Failed to read from DHT sensor!");
     return;
   }
-  // Serial.print("waterTemp = ");
-  // Serial.println(airTemp);
-  // Serial.print("Humidity = ");
-  // Serial.println(humidity);
+
 }
 
 void checkReservoir()
@@ -1276,7 +1283,7 @@ void checkReservoir()
         // Add ph up
         runPump(PH_UP, runtime);
         //reset the timer
-        phWait = 1200000;    // 15 mins wait time
+        phWait = fifteenMins;    // 15 mins wait time
         reservoirPhSamplingTime = millis();
       }
       else if(pHValue > 7.0)
@@ -1290,7 +1297,7 @@ void checkReservoir()
         runPump(PH_DOWN, 5000);
         //reset the timer
         reservoirPhSamplingTime = millis();
-        phWait = 1200000;    // 15 mins wait time
+        phWait = fifteenMins;    // 15 mins wait time
         reservoirPhSamplingTime = millis();
       }
       else
@@ -1300,7 +1307,7 @@ void checkReservoir()
           Serial.println("ph value found to be okay, wait for hour");
         }
         // ph was good, wait 60 mins before checking
-        phWait = 3600000;    // 15 mins wait time
+        phWait = sixtyMins;    // 60 mins wait time
         reservoirPhSamplingTime = millis();
       }
 
@@ -1324,7 +1331,7 @@ void checkReservoir()
         float diff = plantEC-ECValue;
         long runtime = (long)(MLPERGAL*SYSVOLGAL*SECPERML/1000);
         runPump(NUTRIENT, runtime);
-        nutrientWait = 1200000;
+        nutrientWait = fifteenMins;
         reservoirECSamplingTime = millis();
       }
       else
@@ -1333,62 +1340,78 @@ void checkReservoir()
         {
           Serial.println("Ec value found to be okay");
         }
-        nutrientWait = 3600000;
+        nutrientWait = sixtyMins;
         reservoirECSamplingTime = millis();
       }
     }
   }
 }
-// Measure the pH from the DFRobot ph Sensor
+
+/*
+* Name: measurePH
+* Description: checks the sampling time to possible re-measure the ph
+*  updates the global pHValue variable with the latest measurement.
+*/
 void measurePH()
 {
   static float voltage;
   if(millis()-phSamplingTime > phSamplingInterval)
   {
-      pHArray[pHArrayIndex++]=analogRead(phSensorPin);
-      if(pHArrayIndex==ArrayLenth)pHArrayIndex=0;
+      pHArray[pHArrayIndex++] = analogRead(phSensorPin);
+      if(pHArrayIndex==ArrayLenth)pHArrayIndex = 0;
       voltage = avergearray(pHArray, ArrayLenth)*5.0/1024;
       pHValue = 3.5*voltage+pHOffset;
       phSamplingTime=millis();
   }
 }
 
-// Measure the EC and Water Temp
-void measureEC()
+/*
+* Name: measureEC
+* Description: checks the sampling time to possible re-measure the ph
+*  updates the global ECValue variable with the latest measurement.
+*/void measureEC()
 {
-  //Every once in a while,sample the analog value and calculate the average.
-  if(millis()-ECSampleTime>=AnalogSampleInterval)
+  if( (millis()-ECSampleTime) >= AnalogSampleInterval)
   {
-    ECSampleTime=millis();
-     // subtract the last reading:
+    ECSampleTime = millis();
+
+    // subtract the last reading:
     AnalogValueTotal = AnalogValueTotal - readings[index];
     // read from the sensor:
     readings[index] = analogRead(ECphSensorPin);
+
     // add the reading to the total:
     AnalogValueTotal = AnalogValueTotal + readings[index];
+
     // advance to the next position in the array:
     index = index + 1;
+
     // if we're at the end of the array...
     if (index >= numReadings)
+
     // ...wrap around to the beginning:
     index = 0;
+
     // calculate the average:
     AnalogAverage = AnalogValueTotal / numReadings;
   }
+
   /*
-   Every once in a while,MCU read the waterTemp from the DS18B20 and then let the DS18B20 start the convert.
-   Attention:The interval between start the convert and read the waterTemp should be greater than 750 millisecond,or the waterTemp is not accurate!
+   Every once in a while,MCU read the waterTemp from the DS18B20 and then let
+   the DS18B20 start the convert.
+   The interval between start the convert and read the waterTemp should be
+   greater than 750 millisecond,or the waterTemp is not accurate!
   */
-  if(millis()-tempSampleTime>=tempSampleInterval)
+  if((millis()-tempSampleTime) >= tempSampleInterval)
   {
-    tempSampleTime=millis();
+    tempSampleTime = millis();
     waterTemp = TempProcess(ReadwaterTemp);  // read the current waterTemp from the  DS18B20
     TempProcess(StartConvert);                   //after the reading,start the convert for next reading
   }
    /*
    Every once in a while,print the information on the serial monitor.
   */
-  if(millis()-printTime>=printInterval)
+  if(millis()-printTime >= printInterval)
   {
     printTime=millis();
     averageVoltage=AnalogAverage*(float)5000/1024;
@@ -1405,11 +1428,15 @@ void measureEC()
       else if(CoefficientVolatge<=1457)ECValue=6.98*CoefficientVolatge-127;  //3ms/cm<EC<=10ms/cm
       else ECValue=5.3*CoefficientVolatge+2278;                           //10ms/cm<EC<20ms/cm
       ECValue/=1000;    //convert us/cm to ms/cm
+      ECValue*=ECfactor;
     }
   }
 }
 
-// Measure Water Level
+/*
+* Name: measureWL
+* Description: reads WL pins and sets the waterLevelStr respectively
+*/
 void measureWL()
 {
   waterLevel = 0;
@@ -1546,11 +1573,10 @@ void runPump(int pump, unsigned long durationMS)
   }
   digitalWrite(pump, HIGH);
 }
-/*
-    Helper Functions
-*/
 
-//ch=0,let the DS18B20 start the convert;ch=1,MCU read the current waterTemp from the DS18B20.
+/*
+* EC Helper function
+*/
 float TempProcess(bool ch)
 {
   //returns the waterTemp from one DS18B20 in DEG Celsius
@@ -1592,7 +1618,9 @@ float TempProcess(bool ch)
     return waterTempSum;
 }
 
-// used to get an accurate ph value
+/*
+* PH Helper function
+*/
 double avergearray(int* arr, int number)
 {
   int i;
@@ -1600,7 +1628,6 @@ double avergearray(int* arr, int number)
   double avg;
   long amount=0;
   if(number<=0){
-    Serial.println("Error number for the array to avraging!/n");
     return 0;
   }
   if(number<5){   //less than 5, calculated directly statistics
@@ -1635,10 +1662,19 @@ double avergearray(int* arr, int number)
 }
 
 /*
-    Arduino Setup Loop Code
+* Name: setup
+* Description: initializes different components and variables
 */
 void setup()
 {
+  // write all the pins to low to avoid bad signals
+  int i;
+  for (i = 0; i < 54; i++)
+  {
+    pinMode(i, OUTPUT);
+    digitalWrite(i, LOW);
+  }
+
   // WIFI INIT
   if(DEBUG)
   {
@@ -1646,13 +1682,14 @@ void setup()
   }
   Serial2.begin(115200);
 
+  // set the most recent sampling times to the current timestamp
   phSamplingTime = millis();
   ECSampleTime = millis();
-  pinMode(13,OUTPUT);
-  digitalWrite(13,LOW);
+
+  // go initialize the wifi module communications
   initWifiModAP();
 
-  // LCD INIT
+  // lcd intialize
   lcdStatus = LCDAWAKE;
   lcd.begin(16, 2);               // start the library
   lcd.setCursor(0,0);             // set the LCD cursor   position
@@ -1660,10 +1697,11 @@ void setup()
   lcd.setCursor(0,1);             // set the LCD cursor   position
   lcd.print("Sensors");
   currentMenu = mainMenu;
+
+  // air temp and humidity sensor initialize
   dht.begin();
 
-  //SETUP PINMODES
-  // WL
+  // set up pin modes
   pinMode(wlHigh, INPUT);
   pinMode(wlMed, INPUT);
   pinMode(wlLow, INPUT);
@@ -1682,12 +1720,17 @@ void setup()
   digitalWrite(NUTRIENT, LOW);
 }
 
+/*
+* Name: loop
+* Description: main loop of exectution for the board to do.
+*/
 void loop()
 {
   measurePH();
   measureEC();
   measureWL();
   measureAirTemp();
+
   processDisplay();
   communicateWifi();
 
