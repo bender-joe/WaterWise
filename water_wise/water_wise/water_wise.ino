@@ -1674,6 +1674,7 @@ void loop()
   processDisplay();
   communicateWifi();
 
+  checkReservoir();
   // If the timers for the pumps are on,
   // they need to be continupously polled in order to work properly
   if(phUpOn)

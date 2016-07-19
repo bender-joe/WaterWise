@@ -1,0 +1,39 @@
+WaterWise PCB PINOUT Description
+Name            lg  pin     Arduino pin
+wlLow           PA4         Digital 26
+wlMed           PA3         Digital 25
+wlHigh          PA2         Digital 24
+waterTemp       PA1         Digital 23
+airTemp         PA0         Digital 22
+PH              PF2         Analog  2
+EC              PF1         Analog  1
+
+ESP_TX          PH1         Digital 16
+ESP_RX          PH0         Digital 17
+
+pump1ctl        PB6         Digital 12
+pump2ctl        PB5         Digital 11
+pump3ctl        PB4         Digital 10
+pump4ctl        PH6         Digital 9
+pump5ctl        PH5         Digital 8
+pump6ctl        PH4         Digital 7
+pump7ctl        PH3         Digital 6
+pump8ctl        PH2         ??? un referenced
+
+
+relay8ctl       PC7         Digital 30
+relay7ctl       PC6         Digital 31
+relay6ctl       PC5         Digital 32
+relay5ctl       PC4         Digital 33
+relay4ctl       PC3         Digital 34
+relay3ctl       PC2         Digital 35
+relay2ctl       PC1         Digital 36
+relay1ctl       PC0         Digital 37
+
+LCD_D9          PL5         Digital 44
+LCD_D8          PL4         Digital 45
+LCD_D7          PE5         Digital 3
+LCD_D6          PE4         Digital 2
+LCD_D5          PE3         Digital 5
+LCD_D4          PL3         Digital 46
+LCD_A0          PF0         Analog 0

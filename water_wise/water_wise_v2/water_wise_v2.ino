@@ -2,6 +2,7 @@
 
   Senior Design Project
   WaterWise atmega2560 code
+  PCB Deploy Copy
 
 **************************************************************************************/
 #include <Arduino.h>
@@ -12,30 +13,37 @@
 #include <SimpleTimer.h>
 
 // PH CONSTANTS
-#define phSensorPin A5            //pH meter Analog output to Arduino Analog Input 0
-#define pHOffset 0.08            //deviation compensate updated to compensate
-#define LED 13
-#define phSamplingInterval 20
-#define ArrayLenth  40    //times of collection
+#define phSensorPin         A2      //pH meter Analog output to Arduino Analog Input 0
+#define pHOffset            0.08    //deviation compensate updated to compensate
+#define phSamplingInterval  20      //how often (ms) to measure ph
+#define ArrayLenth          40      //times of collection
 
 // EC CONSTANTS
-#define StartConvert 0
-#define ReadwaterTemp 1
+#define StartConvert        0
+#define ReadwaterTemp       1
+#define ECpin               A1
+#define WtempPin            23
 
 // WATER LEVEL CONSTANTS
-#define wlHigh    22
-#define wlMed     24
-#define wlLow     26
+#define wlHigh              24
+#define wlMed               25
+#define wlLow               26
 
+// LCD PINS
+#define D9                  44
+#define D8                  45
+#define D7                  3
+#define D6                  2
+#define D5                  5
+#define D4                  46
 // LCD CONSTANTS
-#define btnRIGHT  0
-#define btnUP     1
-#define btnDOWN   2
-#define btnLEFT   3
-#define btnSELECT 4
-#define btnNONE   5
-
-// MENU DISPLAY STATUS CONSTANTS
+#define btnRIGHT            0
+#define btnUP               1
+#define btnDOWN             2
+#define btnLEFT             3
+#define btnSELECT           4
+#define btnNONE             5
+// LCD MENU DISPLAY STATUS CONSTANTS
 #define LCDSLEEP             98
 #define LCDAWAKE             99
 #define mainMenu            100
@@ -51,23 +59,26 @@
 #define sensorWLevel        110
 #define mainMenu2           111
 #define menuScrollingSpeed  25
-#define DHTPIN              9
-#define DHTTYPE DHT11
+
+//AIR TEMP AND HUMIDITY
+#define DHTPIN              22
+#define DHTTYPE             DHT11
 
 // RELAY PINS
-#define LIGHTPIN    31
-#define PUMPPIN     39
-#define AIRSTONEPIN 35
-#define TOGGLEALL   23
+#define LIGHTPIN            37    //relay1ctl
+#define PUMPPIN             36    //relay2ctl
+#define AIRSTONEPIN         35    //relay3ctl
+// #define TOGGLEALL           23
 
 // P_PUMPPINS
-#define PH_UP       13
-#define PH_DOWN     12
-#define NUTRIENT    11
+#define PH_UP               12    //pump1ctl
+#define PH_DOWN             11    //pump2ctl
+#define NUTRIENT            10    //pump3ctl
 
 // WIFI GLOBALS
 #define DEBUG         true
 #define TIMEOUT       5000
+// HTTP PARAMETER CODES
 #define rqSensorData  1
 #define rqWLvl        4
 #define rqAllPwrOn    7
@@ -79,17 +90,20 @@
 #define rqAirPwrOn    13
 #define rqAirPwrOff   14
 #define rqPowerStat   15
-
+#define rqECValue     16
+// STATUS FLAGS
 boolean reading = false;
 boolean apMode = true;
+// SSID HOLDERS
 String configSSID = "";
 String configPass = "";
+
 
 
 //DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
-LiquidCrystal lcd(45, 44, 46, 5, 2, 3);           // select the pins used on the LCD panel
+LiquidCrystal lcd(D8, D9, D4, D5, D6, D7);           // select the pins used on the LCD panel
 
 // LCD Globals
 int lcd_key     = 0;
@@ -100,20 +114,26 @@ int lcdStatus   = 0;
 // PH GLOBALS
 int pHArray[ArrayLenth];   //Store the average value of the sensor feedback
 int pHArrayIndex=0;
-float pHValue = 0.0;
+//CHANGE THIS
+static float pHValue = 8.0;
+
+static unsigned long phSamplingTime = 0;
 
 // EC GLOBAL
 const float ECfactor = 0.0;
 const byte numReadings = 20;     //the number of sample times
-byte ECphSensorPin = A3;  //EC Meter analog output,pin on analog 1
-byte DS18B20_Pin = 8; //DS18B20 signal, pin on digital 2
+byte ECphSensorPin = ECpin;  //EC Meter analog output,pin on analog 1
+byte DS18B20_Pin = WtempPin; //DS18B20 signal, pin on digital 2
 unsigned int AnalogSampleInterval=25,printInterval=700,tempSampleInterval=850;  //analog sample interval;serial print interval;waterTemp sample interval
 unsigned int readings[numReadings];      // the readings from the analog input
 byte index = 0;                  // the index of the current reading
 unsigned long AnalogValueTotal = 0;                  // the running total
 unsigned int AnalogAverage = 0,averageVoltage=0;                // the average
-unsigned long AnalogSampleTime,printTime,tempSampleTime;
-float waterTemp,ECValue;
+unsigned long ECSampleTime,printTime,tempSampleTime;
+static float waterTemp;
+
+// CHANGE THIS
+static float ECValue = 0.5;
 
 // AIR MEASUREMENT GLOBALS
 unsigned int airTempSampleInterval = 2000;
@@ -121,12 +141,29 @@ float airTemp = 0.0;
 float humidity = 0.0;
 
 // WATER LEVEL GLOBALS
-byte wlphSensorPins[] = {46, 48, 50}; // {low, med, high}
+byte wlphSensorPins[] = {wlLow, wlMed, wlHigh}; // {low, med, high}
 int waterLevel = 0;
 String waterLevelStr = "";
 
-SimpleTimer timer;
+// Peristaltic Pump Globals
+float plantEC = 0.0;
+bool  plantSet = false;
+unsigned long nutrientWait = 900000;    // 15 mins
+unsigned long phWait = 900000;          // 15 mins
+unsigned long reservoirPhSamplingTime = 0;
+unsigned long reservoirECSamplingTime = 0;
+SimpleTimer phUpTimer;
+SimpleTimer phDownTimer;
+SimpleTimer nutrientTimer;
 int runningPump = 0;
+static bool phDownOn = false;
+static bool phUpOn = false;
+static bool nutrientOn = false;
+unsigned long pumpCalibration = 10;
+unsigned long SYSVOLGAL = 15;
+float MLPERGAL = 1.232;
+float ECMLPERGAL = 1.000;
+float SECPERML = 5.06;
 
 
 //waterTemp chip i/o
@@ -261,7 +298,6 @@ void initWifiModAP()
   Serial.println("Server Ready");
 }
 
-
 boolean tryConnectToWifi(String ssid, String pass)
 {
   Serial.println("Tryting to connect to wifi");
@@ -331,6 +367,11 @@ void communicateWifi()
         Serial2.find((char*)"pin=");            // advance cursor to "pin=" Expecting: IPaddress/?pin=XX
         int pinNumber = (Serial2.read()-48);    // get first number i.e. if the pin 13 then the 1st number is 1
         int secondNumber = (Serial2.read()-48);
+        float val = 0.0;
+        int onesDig = 0;
+        int tenthsDig = 0;
+        int period = 0;
+        int comma = 0;
         if(secondNumber>=0 && secondNumber<=9)
         {
           pinNumber*=10;
@@ -372,7 +413,7 @@ void communicateWifi()
             break;
 
           case rqWLvl:
-            Serial.println("sending water leve"+waterLevelStr);
+            Serial.println("sending water level "+waterLevelStr);
             content+= waterLevelStr;
             break;
 
@@ -413,6 +454,25 @@ void communicateWifi()
             content += ",";
             content.concat(digitalRead(PUMPPIN));
             // Serial.println(content);
+            break;
+
+          case rqECValue:
+            // this case sends ,x.x as ECValue
+            Serial.println("Receiving ec value");
+            comma = (Serial2.read()-48);   // read the comma
+            onesDig = (Serial2.read()-48);
+            period = (Serial2.read()-48);
+            tenthsDig = (Serial2.read() - 48);
+            Serial.print("Onesdig: ");
+            Serial.println(onesDig);
+            Serial.print("tenthsDig: ");
+            Serial.println(tenthsDig);
+            val += onesDig;
+            val += (float)(tenthsDig/10.0);
+            Serial.print("Got ec value of: ");
+            Serial.println(val);
+            plantSet = true;
+            plantEC = val;
             break;
 
           default:
@@ -1191,19 +1251,105 @@ void measureAirTemp()
   // Serial.println(humidity);
 }
 
+void checkReservoir()
+{
+  if(plantSet)
+  {
+    //check the pH
+    if(millis()-reservoirPhSamplingTime > phWait)
+    {
+      if(DEBUG)
+      {
+        Serial.println("Checking ph value");
+      }
+      //previous sampling was longer than 15 mins ago
+      // check the ph value, if much greater than 7
+      if(pHValue < 5.0)
+      {
+        if(DEBUG)
+        {
+          Serial.println("ph value found to be low, running ph up pump");
+        }
+        // Figure out how long/how much to add in here
+        float diff = 6.0-pHValue;
+        long runtime = (long)(MLPERGAL*SYSVOLGAL*SECPERML/1000);
+        // Add ph up
+        runPump(PH_UP, runtime);
+        //reset the timer
+        phWait = 1200000;    // 15 mins wait time
+        reservoirPhSamplingTime = millis();
+      }
+      else if(pHValue > 7.0)
+      {
+        if(DEBUG)
+        {
+          Serial.println("ph value found to be high, running ph down pump");
+        }
+        // figure out how much to add here
+        // Add ph down
+        runPump(PH_DOWN, 5000);
+        //reset the timer
+        reservoirPhSamplingTime = millis();
+        phWait = 1200000;    // 15 mins wait time
+        reservoirPhSamplingTime = millis();
+      }
+      else
+      {
+        if(DEBUG)
+        {
+          Serial.println("ph value found to be okay, wait for hour");
+        }
+        // ph was good, wait 60 mins before checking
+        phWait = 3600000;    // 15 mins wait time
+        reservoirPhSamplingTime = millis();
+      }
+
+    }
+
+    // if its time to check the mutrient EC again
+    if(millis() - reservoirECSamplingTime > nutrientWait)
+    {
+      if(DEBUG)
+      {
+        Serial.println("checking ec value");
+      }
+      // check the ec value
+      if(ECValue < plantEC)
+      {
+        if(DEBUG)
+        {
+          Serial.println("Ec value found to be too low");
+        }
+        // Figure out how long/how much to add in here
+        float diff = plantEC-ECValue;
+        long runtime = (long)(MLPERGAL*SYSVOLGAL*SECPERML/1000);
+        runPump(NUTRIENT, runtime);
+        nutrientWait = 1200000;
+        reservoirECSamplingTime = millis();
+      }
+      else
+      {
+        if(DEBUG)
+        {
+          Serial.println("Ec value found to be okay");
+        }
+        nutrientWait = 3600000;
+        reservoirECSamplingTime = millis();
+      }
+    }
+  }
+}
 // Measure the pH from the DFRobot ph Sensor
 void measurePH()
 {
-  static unsigned long samplingTime = millis();
-  static unsigned long printTime = millis();
   static float voltage;
-  if(millis()-samplingTime > phSamplingInterval)
+  if(millis()-phSamplingTime > phSamplingInterval)
   {
       pHArray[pHArrayIndex++]=analogRead(phSensorPin);
       if(pHArrayIndex==ArrayLenth)pHArrayIndex=0;
       voltage = avergearray(pHArray, ArrayLenth)*5.0/1024;
       pHValue = 3.5*voltage+pHOffset;
-      samplingTime=millis();
+      phSamplingTime=millis();
   }
 }
 
@@ -1211,9 +1357,9 @@ void measurePH()
 void measureEC()
 {
   //Every once in a while,sample the analog value and calculate the average.
-  if(millis()-AnalogSampleTime>=AnalogSampleInterval)
+  if(millis()-ECSampleTime>=AnalogSampleInterval)
   {
-    AnalogSampleTime=millis();
+    ECSampleTime=millis();
      // subtract the last reading:
     AnalogValueTotal = AnalogValueTotal - readings[index];
     // read from the sensor:
@@ -1332,18 +1478,73 @@ void toggleRelayComponent(int component, int newPowStatus)
   }
 }
 
-void stopPump()
+void stopPumpPhUp()
 {
-    digitalWrite(runningPump, LOW);
+    digitalWrite(PH_UP, LOW);
+    if(DEBUG)
+    {
+      Serial.println("Turned off ph up pump.");
+    }
+}
+
+void stopPumpPhDown()
+{
+  digitalWrite(PH_DOWN, LOW);
+  if(DEBUG)
+  {
+    Serial.println("Turned off ph down pump.");
+  }
+}
+
+void stopPumpNutrient()
+{
+  digitalWrite(NUTRIENT, LOW);
+  if(DEBUG)
+  {
+    Serial.println("Turned off nutrient pump.");
+  }
 }
 
 void runPump(int pump, unsigned long durationMS)
 {
-  unsigned long prev = 0;
-  unsigned long current = millis();
-  runningPump = pump;
+  if(DEBUG)
+  {
+    Serial.print("Running the ");
+    switch(pump)
+    {
+      case PH_UP:
+        Serial.print("ph up"); break;
+
+      case PH_DOWN:
+        Serial.print("ph down"); break;
+
+      case NUTRIENT:
+        Serial.print("nutrient"); break;
+      default: break;
+    }
+    Serial.print(" pump for: ");
+    Serial.print(durationMS/1000);
+    Serial.println(" seconds");
+  }
+
+  // indicate which pump is being turned on
+  switch(pump)
+  {
+    case PH_UP:
+      phUpOn = true;
+      phUpTimer.setTimeout(durationMS, stopPumpPhUp);
+      break;
+    case PH_DOWN:
+      phDownOn = true;
+      phDownTimer.setTimeout(durationMS, stopPumpPhDown);
+      break;
+    case NUTRIENT:
+      nutrientOn = true;
+      nutrientTimer.setTimeout(durationMS, stopPumpNutrient);
+      break;
+    default: break;
+  }
   digitalWrite(pump, HIGH);
-  timer.setTimeout(durationMS, stopPump );
 }
 /*
     Helper Functions
@@ -1445,6 +1646,8 @@ void setup()
   }
   Serial2.begin(115200);
 
+  phSamplingTime = millis();
+  ECSampleTime = millis();
   pinMode(13,OUTPUT);
   digitalWrite(13,LOW);
   initWifiModAP();
@@ -1487,4 +1690,20 @@ void loop()
   measureAirTemp();
   processDisplay();
   communicateWifi();
+
+  checkReservoir();
+  // If the timers for the pumps are on,
+  // they need to be continupously polled in order to work properly
+  if(phUpOn)
+  {
+    phUpTimer.run();
+  }
+  if(phDownOn)
+  {
+    phDownTimer.run();
+  }
+  if(nutrientOn)
+  {
+    nutrientTimer.run();
+  }
 }
