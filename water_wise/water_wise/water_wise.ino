@@ -11,9 +11,11 @@
 #include "ESP8266.h"
 #include <SimpleTimer.h>
 
+#define CalibratePHSensor false
+#define CalibrateECSensor false
 // PH CONSTANTS
 #define phSensorPin A5            //pH meter Analog output to Arduino Analog Input 0
-#define pHOffset 0.08            //deviation compensate updated to compensate
+#define pHOffset 0.99857            //deviation compensate updated to compensate
 #define LED 13
 #define phSamplingInterval 20
 #define ArrayLenth  40    //times of collection
@@ -101,7 +103,7 @@ int lcdStatus   = 0;
 // PH GLOBALS
 int pHArray[ArrayLenth];   //Store the average value of the sensor feedback
 int pHArrayIndex=0;
-static float pHValue = 8.0;
+static float pHValue = 0.0;
 static unsigned long phSamplingTime = 0;
 
 // EC GLOBAL
@@ -116,7 +118,7 @@ unsigned long AnalogValueTotal = 0;                  // the running total
 unsigned int AnalogAverage = 0,averageVoltage=0;                // the average
 unsigned long ECSampleTime,printTime,tempSampleTime;
 static float waterTemp;
-static float ECValue = 0.5;
+static float ECValue = 0.0;
 
 // AIR MEASUREMENT GLOBALS
 unsigned int airTempSampleInterval = 2000;
@@ -145,8 +147,8 @@ static bool nutrientOn = false;
 unsigned long pumpCalibration = 10;
 unsigned long SYSVOLGAL = 15;
 float MLPERGAL = 1.232;
-float ECMLPERGAL = 1.000;
-float SECPERML = 5.06;
+float ECMLPERGAL = 19.715;
+float MLPERSEC = 0.77;
 
 
 //waterTemp chip i/o
@@ -1255,11 +1257,11 @@ void checkReservoir()
         }
         // Figure out how long/how much to add in here
         float diff = 6.0-pHValue;
-        long runtime = (long)(MLPERGAL*SYSVOLGAL*SECPERML/1000);
+        long runtime = (long)(MLPERGAL*SYSVOLGAL*diff/MLPERSEC*1000);
         // Add ph up
         runPump(PH_UP, runtime);
         //reset the timer
-        phWait = 1200000;    // 15 mins wait time
+        phWait = 1200000+runtime;    // 15 mins wait time
         reservoirPhSamplingTime = millis();
       }
       else if(pHValue > 7.0)
@@ -1268,12 +1270,12 @@ void checkReservoir()
         {
           Serial.println("ph value found to be high, running ph down pump");
         }
-        // figure out how much to add here
-        // Add ph down
-        runPump(PH_DOWN, 5000);
+        float diff = pHValue - 6.0;
+        long runtime = (long)(MLPERGAL*SYSVOLGAL*diff/MLPERSEC*1000);
+        runPump(PH_DOWN, runtime);
         //reset the timer
         reservoirPhSamplingTime = millis();
-        phWait = 1200000;    // 15 mins wait time
+        phWait = 1200000+runtime;    // 15 mins wait time
         reservoirPhSamplingTime = millis();
       }
       else
@@ -1286,7 +1288,6 @@ void checkReservoir()
         phWait = 3600000;    // 15 mins wait time
         reservoirPhSamplingTime = millis();
       }
-
     }
 
     // if its time to check the mutrient EC again
@@ -1297,7 +1298,7 @@ void checkReservoir()
         Serial.println("checking ec value");
       }
       // check the ec value
-      if(ECValue < plantEC)
+      if(ECValue < (plantEC-0.4))
       {
         if(DEBUG)
         {
@@ -1305,9 +1306,9 @@ void checkReservoir()
         }
         // Figure out how long/how much to add in here
         float diff = plantEC-ECValue;
-        long runtime = (long)(MLPERGAL*SYSVOLGAL*SECPERML/1000);
+        long runtime = (long)(ECMLPERGAL*SYSVOLGAL*diff/MLPERSEC*1000);
         runPump(NUTRIENT, runtime);
-        nutrientWait = 1200000;
+        nutrientWait = 1200000+runtime;
         reservoirECSamplingTime = millis();
       }
       else
@@ -1331,8 +1332,15 @@ void measurePH()
       pHArray[pHArrayIndex++]=analogRead(phSensorPin);
       if(pHArrayIndex==ArrayLenth)pHArrayIndex=0;
       voltage = avergearray(pHArray, ArrayLenth)*5.0/1024;
-      pHValue = 3.5*voltage+pHOffset;
+      pHValue = (3.5*voltage)/pHOffset;
       phSamplingTime=millis();
+      if(DEBUG && CalibratePHSensor)
+      {
+        Serial.print("PH VALUE: ");
+        Serial.print(pHValue);
+        Serial.print(" PH OFFSET: ");
+        Serial.println(pHOffset);
+      }
   }
 }
 
@@ -1388,6 +1396,15 @@ void measureEC()
       else if(CoefficientVolatge<=1457)ECValue=6.98*CoefficientVolatge-127;  //3ms/cm<EC<=10ms/cm
       else ECValue=5.3*CoefficientVolatge+2278;                           //10ms/cm<EC<20ms/cm
       ECValue/=1000;    //convert us/cm to ms/cm
+      if(DEBUG && CalibrateECSensor)
+      {
+        Serial.print("EC VALUE: ");
+        Serial.print(ECValue);
+        Serial.print(" EC OFFSET: ");
+        Serial.println(ECfactor);
+        Serial.print("WTEMP: ");
+        Serial.println(waterTemp);
+      }
     }
   }
 }
@@ -1667,8 +1684,8 @@ void setup()
 
 void loop()
 {
-  //measurePH();
-  //measureEC();
+  measurePH();
+  measureEC();
   measureWL();
   measureAirTemp();
   processDisplay();

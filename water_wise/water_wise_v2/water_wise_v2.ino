@@ -173,7 +173,7 @@ unsigned long pumpCalibration = 10;
 unsigned long SYSVOLGAL = 15;
 float MLPERGAL = 1.232;
 float ECMLPERGAL = 1.000;
-float SECPERML = 5.06;
+float SECPERML = 0.77;
 
 
 //waterTemp chip i/o
@@ -1283,7 +1283,7 @@ void checkReservoir()
         // Add ph up
         runPump(PH_UP, runtime);
         //reset the timer
-        phWait = fifteenMins;    // 15 mins wait time
+        phWait = fifteenMins + runtime;    // 15 mins wait time
         reservoirPhSamplingTime = millis();
       }
       else if(pHValue > 7.0)
@@ -1714,6 +1714,9 @@ void setup()
   pinMode(PH_DOWN, OUTPUT);
   pinMode(PH_UP, OUTPUT);
   pinMode(NUTRIENT, OUTPUT);
+
+  // prime the pumps
+  
   //make sure the pumps are off
   digitalWrite(PH_DOWN, LOW);
   digitalWrite(PH_UP, LOW);

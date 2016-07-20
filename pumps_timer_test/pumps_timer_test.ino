@@ -12,7 +12,6 @@ void stopPump()
 
 void runPump(int pump, unsigned long durationMS)
 {
-
   Serial.print("Running the pump for: ");
   Serial.print(durationMS/1000);
   Serial.println(" seconds");
@@ -28,7 +27,9 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial.println("Begin testing runPump and stop pump");
-  runPump(22, 5000);
+  pinMode(22, OUTPUT);
+  digitalWrite(22, LOW);
+  runPump(22, 50000);
 }
 
 void loop() {
@@ -36,6 +37,4 @@ void loop() {
   {
     timer.run();
   }
-
-
 }

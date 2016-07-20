@@ -9,14 +9,14 @@
 #define Offset 0.16            //deviation compensate updated to compensate
 #define LED 13
 #define samplingInterval 20
-#define printInterval 800
+#define printInterval 1000
 #define ArrayLenth  40    //times of collection
 int pHArray[ArrayLenth];   //Store the average value of the sensor feedback
 int pHArrayIndex=0;
 void setup(void)
 {
   pinMode(LED,OUTPUT);
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println("pH meter experiment!");    //Test the serial monitor
 }
 void loop(void)
