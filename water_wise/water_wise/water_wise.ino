@@ -14,7 +14,7 @@
 #define CalibratePHSensor false
 #define CalibrateECSensor false
 // PH CONSTANTS
-#define phSensorPin A5            //pH meter Analog output to Arduino Analog Input 0
+#define phSensorPin         A2      //pH meter Analog output to Arduino Analog Input 0
 #define pHOffset 0.99857            //deviation compensate updated to compensate
 #define LED 13
 #define phSamplingInterval 20
@@ -23,12 +23,21 @@
 // EC CONSTANTS
 #define StartConvert 0
 #define ReadwaterTemp 1
+#define ECpin               A1
+#define WtempPin            23
 
 // WATER LEVEL CONSTANTS
-#define wlHigh    22
-#define wlMed     24
-#define wlLow     26
+#define wlHigh              24
+#define wlMed               25
+#define wlLow               26
 
+// LCD PINS
+#define D9                  44
+#define D8                  45
+#define D7                  3
+#define D6                  2
+#define D5                  5
+#define D4                  46
 // LCD CONSTANTS
 #define btnRIGHT  0
 #define btnUP     1
@@ -53,19 +62,22 @@
 #define sensorWLevel        110
 #define mainMenu2           111
 #define menuScrollingSpeed  25
-#define DHTPIN              9
-#define DHTTYPE DHT11
+
+
+//AIR TEMP AND HUMIDITY
+#define DHTPIN              22
+#define DHTTYPE             DHT11
 
 // RELAY PINS
-#define LIGHTPIN    31
-#define PUMPPIN     39
-#define AIRSTONEPIN 35
-#define TOGGLEALL   23
+#define LIGHTPIN            37    //relay1ctl
+#define PUMPPIN             36    //relay2ctl
+#define AIRSTONEPIN         35    //relay3ctl
+#define TOGGLEALL           23
 
 // P_PUMPPINS
-#define PH_UP       26
-#define PH_DOWN     22
-#define NUTRIENT    24
+#define PH_UP               12    //pump1ctl
+#define PH_DOWN             11    //pump2ctl
+#define NUTRIENT            10    //pump3ctl
 
 // WIFI GLOBALS
 #define DEBUG         true
@@ -92,7 +104,7 @@ String configPass = "";
 //DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
-LiquidCrystal lcd(45, 44, 46, 5, 2, 3);           // select the pins used on the LCD panel
+LiquidCrystal lcd(D8, D9, D4, D5, D6, D7);           // select the pins used on the LCD panel
 
 // LCD Globals
 int lcd_key     = 0;
@@ -109,8 +121,8 @@ static unsigned long phSamplingTime = 0;
 // EC GLOBAL
 const float ECfactor = 0.0;
 const byte numReadings = 20;     //the number of sample times
-byte ECphSensorPin = A3;  //EC Meter analog output,pin on analog 1
-byte DS18B20_Pin = 8; //DS18B20 signal, pin on digital 2
+byte ECphSensorPin = ECpin;  //EC Meter analog output,pin on analog 1
+byte DS18B20_Pin = WtempPin; //DS18B20 signal, pin on digital 2
 unsigned int AnalogSampleInterval=25,printInterval=700,tempSampleInterval=850;  //analog sample interval;serial print interval;waterTemp sample interval
 unsigned int readings[numReadings];      // the readings from the analog input
 byte index = 0;                  // the index of the current reading
@@ -126,7 +138,7 @@ float airTemp = 0.0;
 float humidity = 0.0;
 
 // WATER LEVEL GLOBALS
-byte wlphSensorPins[] = {46, 48, 50}; // {low, med, high}
+byte wlphSensorPins[] = {wlLow, wlMed, wlHigh}; // {low, med, high}
 int waterLevel = 0;
 String waterLevelStr = "";
 
@@ -268,8 +280,9 @@ String sendCommand(String command, const int timeout, boolean debug)
 }
 
 /*
-  Purpose: Sets up the wifi module in AP mode to host HTML page
-  Communication with module through Serial2 (pins 18,19) on Mega2560
+* Name: initWifiModAP
+* Description: Function used to intialize the wifi module in AP mode
+* Purpose: Sets the wifi module in AP mode to host HTML page
 */
 void initWifiModAP()
 {
@@ -280,7 +293,10 @@ void initWifiModAP()
   sendCommand("AT+CIPMUX=1\r\n",1000, DEBUG);       // configure for multiple connections
   sendCommand("AT+CIPSERVER=1,80\r\n",1000,DEBUG);  // turn on server on port 80
 
-  Serial.println("Server Ready");
+  if(DEBUG)
+  {
+    Serial.println("Server Ready");
+  }
 }
 
 boolean tryConnectToWifi(String ssid, String pass)
@@ -332,6 +348,10 @@ String getHtmlIpDisplay(int index, String content)
   return result;
 }
 
+/*
+* Name: communicateWifi
+* Description: handles the wifi communication between esp and MCU
+*/
 void communicateWifi()
 {
   // Serial.println("Checking wifi comms");
@@ -988,8 +1008,12 @@ void displayMenu(int menu)
   }
 }
 
-// handles the input of the button presses
-// detemines what to do for each button press
+
+/*
+* Name: processDisplay
+* Description: handles the input of button presses on the LCD keypad
+*     determines what to do for each button press
+*/
 void processDisplay()
 {
     lcd_key = read_LCD_buttons();
@@ -1004,12 +1028,15 @@ void processDisplay()
               break;                    // power on all relay
             case powerMainPump:         // @ power main pump menu
               toggleRelayComponent(PUMPPIN, 1);
+              toggleRelayComponent(PH_UP, 1);
               break;                    // turn on main pump relay
             case powerAirStone:         // @ power air stone menu
               toggleRelayComponent(AIRSTONEPIN, 1);
+              toggleRelayComponent(PH_DOWN, 1);
               break;                    // turn on air stone relay
             case powerLight:            // @ power light menu
               toggleRelayComponent(LIGHTPIN, 1);
+              toggleRelayComponent(NUTRIENT, 1);
               break;                    // turn on light relay
             case mainMenu:              // @ main, goto powerAll
               currentMenu = powerAll;   // set the curren menu status
@@ -1037,12 +1064,15 @@ void processDisplay()
               break;                    // power off all relay
             case powerMainPump:         // @ power main pump menu
               toggleRelayComponent(PUMPPIN, 0);
+              toggleRelayComponent(PH_UP, 0);
               break;                    // turn off main pump relay
             case powerAirStone:         // @ power air stone menu
               toggleRelayComponent(AIRSTONEPIN, 0);
+              toggleRelayComponent(PH_DOWN, 0);
               break;                    // turn off air stone relay
             case powerLight:            // @ power light menu
               toggleRelayComponent(LIGHTPIN, 0);
+              toggleRelayComponent(NUTRIENT, 0);
               break;                    // turn off light relay
             default: break;
           }
@@ -1214,9 +1244,10 @@ void processDisplay()
 }
 
 /*
-    Sensor Measurement Functions
+* Name: measureAirTemp
+* Description: if the sampling timer is up, measures the latest air temp &
+*   humidity
 */
-// Measure the air temp & humidity from the DHT11
 void measureAirTemp()
 {
   static unsigned long samplingTime = millis();
@@ -1323,7 +1354,12 @@ void checkReservoir()
     }
   }
 }
-// Measure the pH from the DFRobot ph Sensor
+
+/*
+* Name: measurePH
+* Description: checks the sampling time to possible re-measure the ph
+*  updates the global pHValue variable with the latest measurement.
+*/
 void measurePH()
 {
   static float voltage;
@@ -1344,7 +1380,11 @@ void measurePH()
   }
 }
 
-// Measure the EC and Water Temp
+/*
+* Name: measureEC
+* Description: checks the sampling time to possible re-measure the ph
+*  updates the global ECValue variable with the latest measurement.
+*/
 void measureEC()
 {
   //Every once in a while,sample the analog value and calculate the average.
@@ -1409,14 +1449,17 @@ void measureEC()
   }
 }
 
-// Measure Water Level
+/*
+* Name: measureWL
+* Description: reads WL pins and sets the waterLevelStr respectively
+*/
 void measureWL()
 {
   waterLevel = 0;
   // Go read the water level
   for(int i = 0; i < 3; i++)
   {
-    if(digitalRead(wlphSensorPins[i]) == HIGH)
+    if(digitalRead(wlphSensorPins[i]) == LOW)
     {
       waterLevel = 3 - i;
     }
@@ -1439,9 +1482,7 @@ void measureWL()
   }
 }
 
-/*
-    Relay and Pump Control Functions
-*/
+
 /*  turn on or off a relay controlled component
     Params:
     int component : identifies which component to toggle
@@ -1549,8 +1590,6 @@ void runPump(int pump, unsigned long durationMS)
 /*
     Helper Functions
 */
-
-//ch=0,let the DS18B20 start the convert;ch=1,MCU read the current waterTemp from the DS18B20.
 float TempProcess(bool ch)
 {
   //returns the waterTemp from one DS18B20 in DEG Celsius
@@ -1639,6 +1678,13 @@ double avergearray(int* arr, int number)
 */
 void setup()
 {
+  // write all the pins to low to avoid bad signals
+  int i;
+  for (i = 0; i < 54; i++)
+  {
+    pinMode(i, OUTPUT);
+    digitalWrite(i, LOW);
+  }
   // WIFI INIT
   if(DEBUG)
   {
@@ -1648,8 +1694,7 @@ void setup()
 
   phSamplingTime = millis();
   ECSampleTime = millis();
-  pinMode(13,OUTPUT);
-  digitalWrite(13,LOW);
+
   initWifiModAP();
 
   // LCD INIT
