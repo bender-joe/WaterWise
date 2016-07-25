@@ -130,6 +130,7 @@ unsigned long AnalogValueTotal = 0;                  // the running total
 unsigned int AnalogAverage = 0,averageVoltage=0;                // the average
 unsigned long ECSampleTime,printTime,tempSampleTime;
 static float waterTemp;
+static float waterTempF = 0.0;
 static float ECValue = 0.0;
 
 // AIR MEASUREMENT GLOBALS
@@ -145,8 +146,8 @@ String waterLevelStr = "";
 // Peristaltic Pump Globals
 float plantEC = 0.0;
 bool  plantSet = false;
-unsigned long nutrientWait = 900000;    // 15 mins
-unsigned long phWait = 900000;          // 15 mins
+unsigned long nutrientWait = 0;    // 15 mins
+unsigned long phWait = 0;          // 15 mins
 unsigned long reservoirPhSamplingTime = 0;
 unsigned long reservoirECSamplingTime = 0;
 SimpleTimer phUpTimer;
@@ -625,7 +626,7 @@ void displayMenuR(int menu)
       break;
 
     case mainMenu2:
-      lcd.print("System Sleep");
+      lcd.print("Check Reservoir");
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
       }
@@ -714,9 +715,9 @@ void displayMenuR(int menu)
       break;
 
     case sensorWTemp:
-      lcd.print("Water Temp Cel");
+      lcd.print("Water Temp F.");
       lcd.setCursor(0,1);
-      lcd.print(waterTemp, 2);
+      lcd.print(waterTempF, 2);
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayRight();
       }
@@ -740,7 +741,7 @@ void displayMenuR(int menu)
       break;
 
     case sensorATemp:
-      lcd.print("Air Temp Faren");
+      lcd.print("Air Temp F.");
       lcd.setCursor(0,1);
       lcd.print(airTemp, 2);
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
@@ -797,7 +798,7 @@ void displayMenuL(int menu)
       break;
 
     case mainMenu2:
-      lcd.print("System Sleep");
+      lcd.print("Check Reservoir");
       for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
         lcd.scrollDisplayLeft();
       }
@@ -886,9 +887,9 @@ void displayMenuL(int menu)
         break;
 
       case sensorWTemp:
-        lcd.print("Water Temp Cel");
+        lcd.print("Water Temp F.");
         lcd.setCursor(0,1);
-        lcd.print(waterTemp, 2);
+        lcd.print(waterTempF, 2);
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
           lcd.scrollDisplayLeft();
         }
@@ -912,7 +913,7 @@ void displayMenuL(int menu)
         break;
 
       case sensorATemp:
-        lcd.print("Air Temp Faren");
+        lcd.print("Air Temp F.");
         lcd.setCursor(0,1);
         lcd.print(airTemp, 2);
         for (int positionCounter = 0; positionCounter < 15; positionCounter++) {
@@ -954,6 +955,9 @@ void displayMenu(int menu)
       lcd.setCursor(0,1);               // set the LCD cursor   position
       lcd.print("Sensors");
       break;
+    case mainMenu2:
+      lcd.print("Check Reservoir");
+      break;
     case powerAll:
       lcd.print("All On");
       lcd.setCursor(0,1);
@@ -985,9 +989,9 @@ void displayMenu(int menu)
       lcd.print(ECValue, 2);
       break;
     case sensorWTemp:
-      lcd.print("Water Temp Faren");
+      lcd.print("Water Temp F.");
       lcd.setCursor(0,1);
-      lcd.print(waterTemp, 2);
+      lcd.print(waterTempF, 2);
       break;
     case sensorWLevel:
       lcd.print("Water Level");
@@ -995,7 +999,7 @@ void displayMenu(int menu)
       lcd.print(waterLevelStr);
       break;
     case sensorATemp:
-      lcd.print("Air Temp Faren");
+      lcd.print("Air Temp F.");
       lcd.setCursor(0,1);
       lcd.print(airTemp, 2);
       break;
@@ -1028,15 +1032,12 @@ void processDisplay()
               break;                    // power on all relay
             case powerMainPump:         // @ power main pump menu
               toggleRelayComponent(PUMPPIN, 1);
-              toggleRelayComponent(PH_UP, 1);
               break;                    // turn on main pump relay
             case powerAirStone:         // @ power air stone menu
               toggleRelayComponent(AIRSTONEPIN, 1);
-              toggleRelayComponent(PH_DOWN, 1);
               break;                    // turn on air stone relay
             case powerLight:            // @ power light menu
               toggleRelayComponent(LIGHTPIN, 1);
-              toggleRelayComponent(NUTRIENT, 1);
               break;                    // turn on light relay
             case mainMenu:              // @ main, goto powerAll
               currentMenu = powerAll;   // set the curren menu status
@@ -1044,8 +1045,18 @@ void processDisplay()
               displayMenu(currentMenu); // display power all
               break;
             case mainMenu2:
-                // System Sleep option, turn off the LCD
-                /*lcd.noDisplay();*/
+                if(plantSet)
+                {
+                  if(DEBUG)
+                  {
+                    Serial.println("Checking reservoir from LCD input.");
+                  }
+                  phWait = 0;
+                  nutrientWait = 0;
+                  reservoirPhSamplingTime = 0;
+                  reservoirECSamplingTime = 0;
+                  checkReservoir();
+                }
               break;
             default: break;
           }
@@ -1064,15 +1075,12 @@ void processDisplay()
               break;                    // power off all relay
             case powerMainPump:         // @ power main pump menu
               toggleRelayComponent(PUMPPIN, 0);
-              toggleRelayComponent(PH_UP, 0);
               break;                    // turn off main pump relay
             case powerAirStone:         // @ power air stone menu
               toggleRelayComponent(AIRSTONEPIN, 0);
-              toggleRelayComponent(PH_DOWN, 0);
               break;                    // turn off air stone relay
             case powerLight:            // @ power light menu
               toggleRelayComponent(LIGHTPIN, 0);
-              toggleRelayComponent(NUTRIENT, 0);
               break;                    // turn off light relay
             default: break;
           }
@@ -1292,7 +1300,7 @@ void checkReservoir()
         // Add ph up
         runPump(PH_UP, runtime);
         //reset the timer
-        phWait = 1200000+runtime;    // 15 mins wait time
+        phWait = 900000+runtime;    // 15 mins wait time
         reservoirPhSamplingTime = millis();
       }
       else if(pHValue > 7.0)
@@ -1306,7 +1314,7 @@ void checkReservoir()
         runPump(PH_DOWN, runtime);
         //reset the timer
         reservoirPhSamplingTime = millis();
-        phWait = 1200000+runtime;    // 15 mins wait time
+        phWait = 900000+runtime;    // 15 mins wait time
         reservoirPhSamplingTime = millis();
       }
       else
@@ -1316,7 +1324,7 @@ void checkReservoir()
           Serial.println("ph value found to be okay, wait for hour");
         }
         // ph was good, wait 60 mins before checking
-        phWait = 3600000;    // 15 mins wait time
+        phWait = 3600000;
         reservoirPhSamplingTime = millis();
       }
     }
@@ -1339,7 +1347,7 @@ void checkReservoir()
         float diff = plantEC-ECValue;
         long runtime = (long)(ECMLPERGAL*SYSVOLGAL*diff/MLPERSEC*1000);
         runPump(NUTRIENT, runtime);
-        nutrientWait = 1200000+runtime;
+        nutrientWait = 900000+runtime;
         reservoirECSamplingTime = millis();
       }
       else
@@ -1365,11 +1373,16 @@ void measurePH()
   static float voltage;
   if(millis()-phSamplingTime > phSamplingInterval)
   {
-      pHArray[pHArrayIndex++]=analogRead(phSensorPin);
-      if(pHArrayIndex==ArrayLenth)pHArrayIndex=0;
+      pHArray[pHArrayIndex++] = analogRead(phSensorPin);
+      if(pHArrayIndex==ArrayLenth)
+      {
+        pHArrayIndex=0;
+      }
+
       voltage = avergearray(pHArray, ArrayLenth)*5.0/1024;
       pHValue = (3.5*voltage)/pHOffset;
-      phSamplingTime=millis();
+      phSamplingTime = millis();
+
       if(DEBUG && CalibratePHSensor)
       {
         Serial.print("PH VALUE: ");
@@ -1413,8 +1426,9 @@ void measureEC()
   if(millis()-tempSampleTime>=tempSampleInterval)
   {
     tempSampleTime=millis();
-    waterTemp = TempProcess(ReadwaterTemp);  // read the current waterTemp from the  DS18B20
-    TempProcess(StartConvert);                   //after the reading,start the convert for next reading
+    waterTemp = TempProcess(ReadwaterTemp);  // read the current waterTemp from the  DS18B20 (celcius)
+    waterTempF = convertCelToFaren(waterTemp);
+    TempProcess(StartConvert);               //after the reading,start the convert for next reading
   }
    /*
    Every once in a while,print the information on the serial monitor.
@@ -1673,6 +1687,11 @@ double avergearray(int* arr, int number)
   return avg;
 }
 
+// convert temperature from celcius to farenheit
+float convertCelToFaren(float waterTempC)
+{
+  return (waterTempC * 1.80) + 32.0;
+}
 /*
     Arduino Setup Loop Code
 */
